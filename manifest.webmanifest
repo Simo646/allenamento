@@ -1,0 +1,30 @@
+{
+  "name": "Allenamento su misura",
+  "short_name": "Allenamento",
+  "description": "Programma la settimana, registra forza serie per serie e uscite dai file del dispositivo, e segui i progressi sulle tue zone di battito.",
+  "lang": "it",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fbfbf8",
+  "theme_color": "#0a0a0a",
+  "icons": [
+    {
+      "src": "icone/icona-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icone/icona-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icone/icona-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

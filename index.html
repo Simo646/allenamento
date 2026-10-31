@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Allenamento su misura</title>
+<meta name="description" content="Programma la settimana, registra forza serie per serie e uscite dai file del dispositivo, e segui i progressi sulle tue zone di battito.">
+<meta name="theme-color" content="#0a0a0a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Allenamento">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icone/icona-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icone/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
+<style>:root{padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}body{margin:0}</style>
+<link rel="stylesheet" href="stile.css">
+</head>
+<body>
+<div class="app">
+  <main id="vista" aria-live="polite">
+    <header class="testata"><div class="led" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="testata-riga"><div><div class="data">&nbsp;</div><h1>Allenamento</h1></div></div></header>
+    <div class="stato-app"><b>Sto aprendo i tuoi dati</b><span>Programma di oggi, settimana e allenamenti compaiono appena arrivano.</span></div>
+  </main>
+</div>
+
+<nav class="schede-nav" id="nav" aria-label="Sezioni">
+  <div>
+    <button type="button" data-vai="oggi" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>Oggi</button>
+    <button type="button" data-vai="settimana"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v15H4zM4 10h16M9 3v4M15 3v4"/></svg>Settimana</button>
+    <button type="button" data-vai="allenamenti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Allenamenti</button>
+    <button type="button" data-vai="analisi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Analisi</button>
+  </div>
+</nav>
+
+<div class="barra-fondo" id="barra-fondo" hidden></div>
+<div class="velo" id="velo" hidden></div>
+<div class="avviso" id="avviso" role="status" hidden></div>
+
+<script type="module" src="app.js"></script>
+<script>if ("serviceWorker" in navigator) addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));</script>
+</body>
+</html>
