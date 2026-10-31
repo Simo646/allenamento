@@ -1,7 +1,7 @@
 // Un allenamento: riga negli elenchi e foglio di dettaglio (numeri, traccia, curve, zone, serie, modifica).
 import { stato, limiti, ZONE, intervalloZona, coloreTipo, nomeTipo, attive, vai } from "./stato.js";
-import { TIPI, SOTTOTIPI_BICI, volume, massimale } from "./analisi-file.js";
-import { $, el, metti, icona, ICONE, fmtData, fmtDataLunga, fmtNum, fmtDur, fmtOre, fmtPasso, fmtKg, numero, avviso, esito, conConferma } from "./util.js";
+import { TIPI, SOTTOTIPI_BICI, volume, massimale, trovaVuoti } from "./analisi-file.js";
+import { $, el, metti, icona, ICONE, fmtData, fmtDataLunga, fmtNum, fmtDur, fmtOre, fmtPasso, fmtKg, numero, avviso, esito, conConferma, somma } from "./util.js";
 import { COLORE_ZONA, graficoTraccia, graficoCurva, graficoTempo } from "./grafici.js";
 
 export const zoneDi = (s) => [s.z1_min, s.z2_min, s.z3_min, s.z4_min, s.z5_min];
@@ -159,10 +159,17 @@ async function caricaPesanti(s, box, lim) {
     pezzi.push(el("section", { class: "card" }, el("h2", {}, "Traccia"), el("p", { class: "sotto" }, "Ogni tratto ha il colore della zona del battito. Tocca la traccia per tempo e battito."), g));
     grafici.push(() => graficoTraccia(g, d.traccia, d.curva_fc, lim));
   }
+  // Soste (dispositivo in pausa, nessun dato) e tratti senza fascia, per segnarli sui grafici.
+  const vuoti = d.curva_fc ? trovaVuoti(d.curva_fc, { traccia: d.traccia, curve: d.curve }) : [];
+  const soste = vuoti.filter((v) => v.tipo === "sosta");
+  const senzaFc = vuoti.filter((v) => v.tipo !== "sosta");
   if (d.curva_fc?.fc?.some((v) => v != null)) {
     const g = el("div");
-    pezzi.push(el("section", { class: "card" }, el("h2", {}, "Battito"), el("p", { class: "sotto" }, `Media ogni ${d.curva_fc.passo_s} secondi, sulle bande delle tue zone.`), g));
-    grafici.push(() => graficoCurva(g, d.curva_fc, lim));
+    const nota = [`Media ogni ${d.curva_fc.passo_s} secondi, sulle bande delle tue zone.`];
+    if (soste.length) nota.push(`In grigio ${soste.length === 1 ? "la sosta" : `le ${soste.length} soste`} (${fmtDur(somma(soste, (v) => v.a - v.da) / 60)} in tutto): il dispositivo era in pausa e non registrava, il tratteggio ricollega il battito di prima e di dopo.`);
+    if (senzaFc.length) nota.push(`"No FC": ${senzaFc.length === 1 ? "un tratto" : `${senzaFc.length} tratti`} senza battito dalla fascia.`);
+    pezzi.push(el("section", { class: "card" }, el("h2", {}, "Battito"), el("p", { class: "sotto" }, nota.join(" ")), g));
+    grafici.push(() => graficoCurva(g, d.curva_fc, lim, vuoti));
   }
   const c = d.curve;
   const extra = c ? [
@@ -174,7 +181,7 @@ async function caricaPesanti(s, box, lim) {
   for (const [k, nome, colore, formato] of extra) {
     const g = el("div");
     pezzi.push(el("section", { class: "card" }, el("h2", {}, nome), g));
-    grafici.push(() => graficoTempo(g, { valori: c[k], passo_s: c.passo_s, colore, formato, nome }));
+    grafici.push(() => graficoTempo(g, { valori: c[k], passo_s: c.passo_s, colore, formato, nome, vuoti: soste }));
   }
   if (!pezzi.length) { box.remove(); return; }
   metti(box, ...pezzi);

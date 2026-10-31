@@ -263,8 +263,28 @@ function asseTempo(g, durS, x) {
   g.add(sv("line", { x1: g.m.l, x2: g.m.l + g.iw, y1: g.m.t + g.ih, y2: g.m.t + g.ih, class: "base" }));
 }
 
-// Curva del battito di una sessione, sulle bande delle zone.
-export function graficoCurva(contenitore, curva, lim) {
+// Soste e tratti senza battito: banda chiara a tutta altezza con l'etichetta, se c'è spazio. Nei tratti di sosta il
+// dispositivo era in pausa e non registrava niente, quindi lì non ci sono dati da disegnare.
+const durataVuoto = (v) => { const s = v.a - v.da; return s >= 90 ? `${Math.round(s / 60)} min` : `${s} s`; };
+const nomeVuoto = (v) => (v.tipo === "sosta" ? "Sosta" : "Senza battito");
+function disegnaVuoti(g, vuoti, x) {
+  for (const v of vuoti) {
+    const x0 = x(v.da), w = Math.max(x(v.a) - x0, 1.5);
+    g.add(sv("rect", { x: x0, y: g.m.t, width: w, height: g.ih, fill: "var(--surface-2)" }),
+      sv("line", { x1: x0, x2: x0, y1: g.m.t, y2: g.m.t + g.ih, stroke: "var(--line)", "stroke-width": 1 }),
+      sv("line", { x1: x0 + w, x2: x0 + w, y1: g.m.t, y2: g.m.t + g.ih, stroke: "var(--line)", "stroke-width": 1 }));
+    const cx = x0 + w / 2, stile = "font-size:10px;font-weight:700;letter-spacing:.06em";
+    if (w >= 34) g.add(sv("text", { x: cx, y: g.m.t + 12, "text-anchor": "middle", style: stile }, v.tipo === "sosta" ? "SOSTA" : "NO FC"));
+    if (w >= 20) g.add(sv("text", { x: cx, y: g.m.t + (w >= 34 ? 24 : 12), "text-anchor": "middle", style: stile }, durataVuoto(v).replace(" min", "'").replace(" s", '"')));
+  }
+}
+const tipVuoto = (vuoti, sec, xPx, g) => {
+  const v = vuoti.find((q) => sec >= q.da && sec < q.a);
+  return v ? { x: xPx, y: g.m.t + 30, titolo: `Dal ${Math.floor(v.da / 60)}' al ${Math.floor(v.a / 60)}'`, righe: [[null, nomeVuoto(v), durataVuoto(v)]] } : null;
+};
+
+// Curva del battito di una sessione, sulle bande delle zone; `vuoti` da trovaVuoti() di analisi-file.js.
+export function graficoCurva(contenitore, curva, lim, vuoti = []) {
   const g = pianoGrafico(contenitore, { H: 200, m: { t: 10, r: 28, b: 24, l: 36 } });
   const fc = curva.fc;
   const validi = fc.filter((v) => v != null);
@@ -280,15 +300,22 @@ export function graficoCurva(contenitore, curva, lim) {
       sv("rect", { x: g.m.l, y: y(b), width: g.iw, height: y(a) - y(b), fill: COLORE_ZONA[z], style: "fill-opacity:var(--band-alpha)" }),
       sv("text", { x: g.W - g.m.r + 6, y: (y(a) + y(b)) / 2 + 4 }, ZONE[z]));
   }
+  disegnaVuoti(g, vuoti, x);
   asseY(g, tacche(lo, hi).filter((t) => t >= lo && t <= hi), y, String, { griglia: false });
   asseTempo(g, durS, x);
+  // Sopra le soste la curva si ricollega con un tratteggio: il battito di prima e di dopo la sosta.
+  for (const v of vuoti.filter((q) => q.tipo === "sosta")) {
+    const i0 = Math.round(v.da / curva.passo_s) - 1, i1 = Math.round(v.a / curva.passo_s);
+    if (fc[i0] != null && fc[i1] != null) g.add(sv("line", { x1: x((i0 + 0.5) * curva.passo_s), y1: y(fc[i0]), x2: x((i1 + 0.5) * curva.passo_s), y2: y(fc[i1]),
+      stroke: "var(--faint)", "stroke-width": "1.5", "stroke-dasharray": "3 4" }));
+  }
   g.add(sv("path", { d: percorso(fc, curva.passo_s, x, y), fill: "none", stroke: "var(--ink)", "stroke-width": "2", "stroke-linejoin": "round", "stroke-linecap": "round" }));
   const punto = sv("circle", { r: 4, fill: "var(--ink)", stroke: "var(--surface)", "stroke-width": "2", visibility: "hidden" });
   g.add(punto);
   sensibile(g, (px) => {
     const i = Math.max(0, Math.min(fc.length - 1, Math.round(((px - g.m.l) / g.iw) * fc.length - 0.5)));
     const v = fc[i];
-    if (v == null) return null;
+    if (v == null) { punto.setAttribute("visibility", "hidden"); return tipVuoto(vuoti, i * curva.passo_s, x((i + 0.5) * curva.passo_s), g); }
     const cx = x((i + 0.5) * curva.passo_s), cy = y(v);
     punto.setAttribute("cx", cx); punto.setAttribute("cy", cy); punto.setAttribute("visibility", "visible");
     const sec = i * curva.passo_s, zz = zonaDi(v, lim) - 1;
@@ -307,7 +334,7 @@ function percorso(valori, passo, x, y) {
 }
 
 // Una grandezza nel tempo (quota, velocità, potenza, cadenza) con area sotto la linea.
-export function graficoTempo(contenitore, { valori, passo_s, colore, formato, nome }) {
+export function graficoTempo(contenitore, { valori, passo_s, colore, formato, nome, vuoti = [] }) {
   const validi = valori.filter((v) => v != null);
   if (validi.length < 2) return vuoto(contenitore, "Dati insufficienti.");
   const g = pianoGrafico(contenitore, { H: 150, m: { t: 10, r: 10, b: 24, l: 40 } });
@@ -316,6 +343,8 @@ export function graficoTempo(contenitore, { valori, passo_s, colore, formato, no
   const lo = ticks[0], hi = ticks[ticks.length - 1] > lo ? ticks[ticks.length - 1] : lo + 1;
   const x = (s) => g.m.l + (s / durS) * g.iw;
   const y = (v) => g.m.t + g.ih - ((v - lo) / (hi - lo)) * g.ih;
+  const soste = vuoti.filter((q) => q.tipo === "sosta");
+  disegnaVuoti(g, soste, x);
   asseY(g, ticks, y, formato);
   asseTempo(g, durS, x);
   const linea = percorso(valori, passo_s, x, y);
@@ -332,7 +361,7 @@ export function graficoTempo(contenitore, { valori, passo_s, colore, formato, no
   sensibile(g, (px) => {
     const i = Math.max(0, Math.min(valori.length - 1, Math.round(((px - g.m.l) / g.iw) * valori.length - 0.5)));
     const v = valori[i];
-    if (v == null) return null;
+    if (v == null) { punto.setAttribute("visibility", "hidden"); return tipVuoto(soste, i * passo_s, x((i + 0.5) * passo_s), g); }
     const cx = x((i + 0.5) * passo_s), cy = y(v);
     punto.setAttribute("cx", cx); punto.setAttribute("cy", cy); punto.setAttribute("visibility", "visible");
     const sec = i * passo_s;

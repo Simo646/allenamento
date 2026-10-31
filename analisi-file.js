@@ -314,6 +314,29 @@ export function zoneDaCurva(curvaFc, limiti) {
   return { z1_min: z1, z2_min: z2, z3_min: z3, z4_min: z4, z5_min: z5 };
 }
 
+// Tratti senza battito di almeno `minimo_s` secondi, con il motivo. Se nello stesso tratto non c'è nessun altro dato
+// (traccia GPS, velocità, quota) il dispositivo era in pausa: "sosta". Se gli altri dati ci sono, mancava solo la
+// fascia: "fascia". Senza traccia né altre curve non si può sapere: "vuoto".
+export function trovaVuoti(curva, { traccia = null, curve = null, minimo_s = 30 } = {}) {
+  const fc = curva?.fc ?? [], passo = curva?.passo_s ?? PASSO_CURVA_S;
+  const altri = curve ? Object.entries(curve).filter(([k, v]) => k !== "passo_s" && Array.isArray(v)).map(([, v]) => v) : [];
+  const conAltri = (traccia?.t?.length ?? 0) > 1 || altri.length > 0;
+  const out = [];
+  let da = -1;
+  for (let i = 0; i <= fc.length; i++) {
+    const vuoto = i < fc.length && fc[i] == null;
+    if (vuoto && da < 0) da = i;
+    if (vuoto || da < 0) continue;
+    const s0 = da * passo, s1 = i * passo;
+    if (s1 - s0 >= minimo_s) {
+      const registrava = (traccia?.t ?? []).some((t) => t > s0 + passo && t < s1 - passo) || altri.some((v) => v.slice(da, i).some((x) => x != null));
+      out.push({ da: s0, a: s1, tipo: !conAltri ? "vuoto" : registrava ? "fascia" : "sosta" });
+    }
+    da = -1;
+  }
+  return out;
+}
+
 // Media di un campo ogni PASSO_CURVA_S secondi dall'inizio; null dove manca.
 function serie(punti, inizio, chiave) {
   const somme = [], conti = [];
