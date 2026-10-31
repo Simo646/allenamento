@@ -4,6 +4,7 @@ import { precompilaEsercizio, vociDelGiorno, ESERCIZI } from "./dati.js";
 import { riassumiFit, riassumiXml, idSessione, CAMPI_FILE, CAMPI_DETTAGLIO, TIPI, SOTTOTIPI_BICI, volume } from "./analisi-file.js";
 import { $, el, metti, icona, ICONE, oggi, fmtData, fmtGiorno, fmtNum, fmtKg, fmtSec, fmtDur, numero, avviso, esito, ricorda, conConferma } from "./util.js";
 import { metriche, barraZone } from "./dettaglio.js";
+import { contenutoScheda, riassuntoScheda } from "./schede.js";
 
 const FIT_SDK = "https://cdn.jsdelivr.net/npm/@garmin/fitsdk@21.218.0/+esm";
 const occupato = (id) => stato.sessioni.some((s) => s.id === id);
@@ -87,6 +88,7 @@ function moduloForza(main, param) {
       }));
     return el("section", { class: "card esercizio" },
       el("div", { class: "esercizio-testa" }, el("h2", {}, `${i + 1}. ${e.nome}`), e.recupero_s ? el("span", {}, `rec. ${e.recupero_s < 60 ? e.recupero_s + " s" : String(e.recupero_s / 60).replace(".", ",") + " min"}`) : null),
+      (e.nota || scheda?.esercizi?.find((x) => x.nome === e.nome)?.nota) ? el("p", { class: "nota-esercizio" }, e.nota || scheda.esercizi.find((x) => x.nome === e.nome).nota) : null,
       el("p", { class: "sotto num" }, u ? `Ultima volta, ${fmtData(u.data, { day: "numeric", month: "short" })}: ${u.serie.map(fmtSerie).join(" · ")}` : "Prima volta: scegli carichi che ti lasciano 2 ripetizioni di margine."),
       griglia,
       el("div", { style: "display:flex;justify-content:space-between;align-items:center;gap:8px" },
@@ -147,6 +149,7 @@ function moduloForza(main, param) {
         el("div", { class: "tile" }, el("small", {}, "Tempo"), tempo),
         el("div", { class: "tile" }, el("small", {}, "Serie fatte"), contaSerie),
         el("div", { class: "tile" }, el("small", {}, "Volume"), volumeTile)),
+      scheda?.nota ? el("p", { class: "nota-scheda" }, scheda.nota) : null,
       el("p", { class: "sotto" }, "Spunta le serie mentre le fai: parte il recupero. Se non spunti niente, salvo tutte le serie compilate."),
       annulla),
     esercizi.length ? esercizi : el("p", { class: "vuoto" }, schedeForza.length ? "Scegli una scheda qui sopra o aggiungi gli esercizi uno alla volta." : "Aggiungi gli esercizi uno alla volta, oppure crea una scheda nella Settimana."),
@@ -197,11 +200,20 @@ function moduloFile(main, param) {
   const scelta = el("div", { class: "seg", role: "group", "aria-label": "Come registrare" },
     el("button", { type: "button", "aria-pressed": String(!aMano), onclick: () => vai("registra", { ...param, aMano: false }) }, "Da file"),
     el("button", { type: "button", "aria-pressed": String(aMano), onclick: () => vai("registra", { ...param, aMano: true }) }, "A mano"));
-  metti(main, 
+  // Avviato da una scheda (HIIT o cardio): la scheda resta sotto gli occhi, con esercizi, tempi e nota.
+  const s = param.voce?.scheda ? stato.schede[param.voce.scheda] : null;
+  const schedaBox = s ? el("section", { class: "card" },
+    el("div", { class: "card-testa" }, el("h2", {}, s.titolo || nomeTipo(s.tipo)), el("span", { class: "sotto" }, riassuntoScheda(s))),
+    s.nota ? el("p", { class: "nota-scheda" }, s.nota) : null,
+    contenutoScheda(s)) : null;
+  metti(main,
     testata({ titolo: aMano ? "Allenamento a mano" : "Importa file", sopra: "Registra", indietro: torna }),
+    schedaBox,
     scelta,
     aMano ? formManuale(param) : formFile(param));
 }
+// La scheda da collegare all'allenamento: quella da cui sei partito, se è dello stesso tipo, altrimenti quella del giorno.
+const schedaPer = (param, tipo, data) => (param.voce?.scheda && param.voce.tipo === tipo ? param.voce.scheda : vociDelGiorno(stato.settimana, data).find((v) => v.tipo === tipo)?.scheda ?? null);
 
 function formFile(param) {
   const attesa = [];
@@ -271,11 +283,11 @@ function formFile(param) {
         const id = stessa?.id ?? idSessione(r.data, r.tipo, (x) => presi.has(x) || occupato(x));
         presi.add(id);
         const campi = Object.fromEntries(CAMPI_FILE.map((c) => [c, r[c] ?? null]));
-        const voce = vociDelGiorno(stato.settimana, r.data).find((v) => v.tipo === r.tipo);
-        const schedaVoce = voce?.scheda ? stato.schede[voce.scheda] : null;
+        const idScheda = schedaPer(param, r.tipo, r.data);
+        const schedaVoce = idScheda ? stato.schede[idScheda] : null;
         const doc = stessa
           ? { ...stessa, ...campi, tipo: r.tipo, sottotipo: r.sottotipo ?? stessa.sottotipo ?? null }
-          : { data: r.data, tipo: r.tipo, sottotipo: r.sottotipo ?? null, nome: schedaVoce?.titolo ?? r.nome_file ?? "", nota: "", scheda: voce?.scheda ?? null, ...campi };
+          : { data: r.data, tipo: r.tipo, sottotipo: r.sottotipo ?? null, nome: schedaVoce?.titolo ?? r.nome_file ?? "", nota: "", scheda: idScheda, ...campi };
         await stato.archivio.scrivi("sessioni", id, doc);
         await stato.archivio.scrivi("dettagli", id, Object.fromEntries(CAMPI_DETTAGLIO.map((c) => [c, r[c] ?? null])));
         fatti++;
@@ -317,10 +329,10 @@ function formManuale(param) {
     if (!data.value || !valori.durata_min) return esito(esitoM, "Servono il giorno e la durata.", "err");
     salva.disabled = true;
     try {
-      const voce = vociDelGiorno(stato.settimana, data.value).find((x) => x.tipo === v.tipo);
-      const schedaVoce = voce?.scheda ? stato.schede[voce.scheda] : null;
+      const idScheda = schedaPer(param, v.tipo, data.value);
+      const schedaVoce = idScheda ? stato.schede[idScheda] : null;
       const id = idSessione(data.value, v.tipo, occupato);
-      await stato.archivio.scrivi("sessioni", id, { data: data.value, tipo: v.tipo, sottotipo: v.tipo === "Bici" ? v.sottotipo : null, nome: schedaVoce?.titolo ?? "", scheda: voce?.scheda ?? null,
+      await stato.archivio.scrivi("sessioni", id, { data: data.value, tipo: v.tipo, sottotipo: v.tipo === "Bici" ? v.sottotipo : null, nome: schedaVoce?.titolo ?? "", scheda: idScheda,
         ...valori, z1_min: null, z2_min: null, z3_min: null, z4_min: null, z5_min: null, nota: nota.value.trim(), fonte: "Inserito a mano" });
       avviso("Allenamento salvato");
       vai("oggi");

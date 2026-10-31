@@ -43,6 +43,17 @@ export function nuovaScheda(tipo) {
   if (tipo === "HIIT") return { ...base, titolo: "HIIT", esercizi: [], lavoro_s: 40, pausa_s: 20, giri: 3, recupero_giri_s: 90 };
   return { ...base, titolo: tipo, sottotipo: null, durata_min: 45, km: null, zona: 2 };
 }
+// Serie in breve: "4 × 10 · 60 kg" se sono tutte uguali, altrimenti "60×10 · 62,5×8 · 65×6".
+const kgTesto = (kg) => String(kg).replace(".", ",");
+export const tutteUguali = (serie = []) => serie.length > 0 && serie.every((s) => (s.kg ?? null) === (serie[0].kg ?? null) && (s.rip ?? null) === (serie[0].rip ?? null));
+export function riassuntoSerie(serie = []) {
+  if (!serie.length) return "";
+  if (tutteUguali(serie)) return `${serie.length} × ${serie[0].rip ?? "—"}` + (serie[0].kg ? ` · ${kgTesto(serie[0].kg)} kg` : "");
+  return serie.map((s) => (s.kg ? `${kgTesto(s.kg)}×${s.rip ?? "—"}` : `${s.rip ?? "—"}`)).join(" · ");
+}
+// Durata stimata di una scheda di forza: circa 40" per serie più il recupero (90" se non indicato).
+export const durataForza = (s) => Math.round((s.esercizi ?? []).reduce((a, e) => a + (e.serie?.length ?? 0) * (40 + (e.recupero_s ?? 90)), 0) / 60);
+
 export const durataHiit = (s) => Math.round(((s.lavoro_s + s.pausa_s) * (s.esercizi?.length ?? 0) * s.giri + s.recupero_giri_s * Math.max(0, s.giri - 1)) / 60);
 
 // Schede di esempio per chi parte da un modello: si possono cambiare o cancellare.

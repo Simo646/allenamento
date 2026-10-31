@@ -1,9 +1,10 @@
 // Avvio dell'app, vista Oggi ed elenco degli allenamenti. Le altre viste stanno nei loro moduli e si registrano da sole.
 import { stato, avvia, registraVista, vai, programmaRender, testata, coloreTipo, nomeTipo, iconaTipo, chipZona, modulo, descriviVoce, intervalloZona } from "./stato.js";
-import { GIORNI, vociDelGiorno, statoVoci, recupero, durataHiit } from "./dati.js";
+import { GIORNI, vociDelGiorno, statoVoci, recupero } from "./dati.js";
 import { TIPI } from "./analisi-file.js";
-import { $, el, metti, icona, ICONE, oggi, piuGiorni, lunediDi, fmtData, fmtNum, fmtDur, fmtOre, fmtKg, somma } from "./util.js";
+import { $, el, metti, icona, ICONE, oggi, piuGiorni, lunediDi, fmtData, fmtNum, fmtDur, fmtOre, somma, ricorda } from "./util.js";
 import { voceSessione, perData, metriche, apriDettaglio } from "./dettaglio.js";
+import { contenutoScheda } from "./schede.js";
 import "./settimana.js";
 import "./registra.js";
 import "./analisi.js";
@@ -95,20 +96,6 @@ function rigaVoce(d, v) {
     dettaglio.length ? el("div", { class: "voce-dettaglio" }, dettaglio) : null);
 }
 
-// Contenuto di una scheda, compatto: serie e carichi per la forza, tempi per l'HIIT.
-export function contenutoScheda(s) {
-  if (s.tipo === "Forza") return el("ul", { class: "lista-scheda" }, (s.esercizi ?? []).map((e) => {
-    const serie = e.serie ?? [];
-    const kg = [...new Set(serie.map((x) => x.kg).filter((x) => x != null))];
-    const rip = [...new Set(serie.map((x) => x.rip).filter((x) => x != null))];
-    const testo = `${serie.length} × ${rip.length === 1 ? rip[0] : rip.join("/") || "—"}` + (kg.length ? ` · ${kg.map(fmtKg).join("/")} kg` : "");
-    return el("li", {}, el("b", {}, e.nome), el("span", { class: "num" }, testo));
-  }));
-  if (s.tipo === "HIIT") return el("div", { style: "display:grid;gap:6px" },
-    el("span", { class: "num" }, `${s.lavoro_s}" lavoro · ${s.pausa_s}" pausa · ${s.giri} giri · ${s.recupero_giri_s}" tra i giri · circa ${durataHiit(s)} min`),
-    el("ul", { class: "lista-scheda" }, (s.esercizi ?? []).map((e, i) => el("li", {}, el("b", {}, `${i + 1}. ${e.nome}`)))));
-  return null;
-}
 
 function azioniRapide() {
   const b = (testo, f) => el("button", { type: "button", class: "btn", onclick: f }, testo);
@@ -212,7 +199,9 @@ registraVista("allenamenti", { vivo: true, render(main) {
 } });
 
 /* ---------- avvio ---------- */
-for (const b of document.querySelectorAll(".schede-nav [data-vai]")) b.addEventListener("click", () => vai(b.dataset.vai));
+// Il tasto Piano riapre la parte vista l'ultima volta: settimana o schede.
+for (const b of document.querySelectorAll(".schede-nav [data-vai]"))
+  b.addEventListener("click", () => vai(b.dataset.vai === "settimana" && ricorda.leggi("piano") === "schede" ? "schede" : b.dataset.vai));
 let larghezza = 0;
 new ResizeObserver(([e]) => {
   const w = Math.round(e.contentRect.width);

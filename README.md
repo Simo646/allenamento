@@ -20,7 +20,8 @@ Su un telefono nuovo, al primo avvio scegli **Importa un backup**.
 ## Cosa fa
 
 - Settimana tipo da lunedì a domenica, con le schede che vuoi: forza (esercizi, serie, chili, ripetizioni), HIIT, corsa, camminata, trekking, bici da strada, gravel o MTB.
-- Forza serie per serie, con i carichi dell'ultima volta e il recupero che parte da solo.
+- Schede da leggere al volo come un foglio da palestra, da duplicare e da avviare con un tocco; le serie uguali si scrivono in una riga.
+- Forza serie per serie, con i carichi dell'ultima volta, il recupero che parte da solo e le note dell'esercizio sotto gli occhi.
 - Import dei file FIT, GPX e TCX di orologi, ciclocomputer e app (Garmin, Wahoo, Coros, Polar, Suunto, Strava…): traccia, battito, zone, quota, velocità, potenza e cadenza quando ci sono.
 - Zone di battito calcolate dall'età, con la formula di Karvonen o scritte a mano.
 - Grafici: minuti e zone per settimana, distanze, passo o velocità, massimale stimato per esercizio.

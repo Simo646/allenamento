@@ -1,10 +1,10 @@
-// Settimana tipo (lunedì-domenica), voci dei giorni e schede modificabili.
-import { stato, registraVista, vai, rivai, testata, salvaSettimana, iconaTipo, nomeTipo, attive, descriviVoce, ZONE, intervalloZona } from "./stato.js";
-import { GIORNI, NOMI_GIORNI, ESERCIZI, nuovaScheda, durataHiit, statoVoci, spostaVoce, idCasuale } from "./dati.js";
-import { TIPI, SOTTOTIPI_BICI } from "./analisi-file.js";
+// Piano › Settimana (lunedì-domenica), le voci dei giorni e l'editor delle schede. L'elenco e la vista di lettura
+// delle schede stanno in schede.js.
+import { stato, registraVista, vai, rivai, testata, salvaSettimana, iconaTipo, nomeTipo, attive, descriviVoce, intervalloZona } from "./stato.js";
+import { GIORNI, NOMI_GIORNI, ESERCIZI, nuovaScheda, durataHiit, durataForza, statoVoci, spostaVoce, idCasuale, tutteUguali } from "./dati.js";
+import { SOTTOTIPI_BICI } from "./analisi-file.js";
 import { el, metti, icona, ICONE, oggi, piuGiorni, lunediDi, fmtData, numero, avviso, esito, conConferma } from "./util.js";
-
-const CARDIO = ["Corsa", "Camminata", "Trekking", "Bici"];
+import { sceltaPiano, CARDIO } from "./schede.js";
 
 /* ---------- Settimana ---------- */
 registraVista("settimana", { vivo: true, render(main) {
@@ -23,31 +23,18 @@ registraVista("settimana", { vivo: true, render(main) {
       }) : el("p", { class: "riposo" }, "Riposo"),
       el("button", { type: "button", class: "lnk", style: "justify-self:start", onclick: () => vai("voce", { giorno: g }) }, "+ Aggiungi a " + NOMI_GIORNI[g].toLowerCase()));
   });
-  const schede = Object.values(stato.schede).sort((a, b) => TIPI.indexOf(a.tipo) - TIPI.indexOf(b.tipo) || (a.titolo ?? "").localeCompare(b.titolo ?? ""));
-  const nuove = [["Forza", "+ Forza"], ["HIIT", "+ HIIT"], ["Corsa", "+ Cardio"]].filter(([t]) => t === "Corsa" ? CARDIO.some((c) => attive().includes(c)) : attive().includes(t));
-  metti(main, 
-    testata({ titolo: "Settimana" }),
+  metti(main,
+    testata({ titolo: "Piano" }),
+    sceltaPiano("settimana"),
     el("p", { class: "sotto" }, "La tua settimana tipo: si ripete ogni settimana. Tocca un'attività per cambiarla o spostarla in un altro giorno."),
-    el("section", { class: "card" }, giorni),
-    el("section", { class: "card" },
-      el("div", { class: "card-testa" }, el("h2", {}, "Schede"), el("span", { class: "sotto" }, "Esercizi, serie e obiettivi")),
-      schede.length ? el("div", {}, schede.map((s) => el("button", { type: "button", class: "scheda-riga", onclick: () => vai("scheda", { id: s.id }) },
-        iconaTipo(s.tipo === "Forza" || s.tipo === "HIIT" ? s.tipo : s.tipo),
-        el("span", { class: "voce-testo" }, el("b", {}, s.titolo || nomeTipo(s.tipo)), el("span", {}, riassuntoScheda(s))))))
-        : el("p", { class: "vuoto" }, "Nessuna scheda. Creane una per avere esercizi, serie e carichi pronti quando ti alleni."),
-      el("div", { class: "azioni" }, nuove.map(([t, testo]) => el("button", { type: "button", class: "btn piccolo", onclick: () => vai("scheda", { nuova: t }) }, testo)))));
+    el("section", { class: "card" }, giorni));
 } });
 
-function riassuntoScheda(s) {
-  if (s.tipo === "Forza") return `${s.esercizi?.length ?? 0} esercizi · ${(s.esercizi ?? []).reduce((a, e) => a + (e.serie?.length ?? 0), 0)} serie`;
-  if (s.tipo === "HIIT") return `${s.esercizi?.length ?? 0} esercizi · ${s.giri} giri · circa ${durataHiit(s)} min`;
-  return [nomeTipo(s.tipo, s.sottotipo), s.durata_min ? `${s.durata_min} min` : null, s.km ? `${s.km} km` : null, s.zona ? `Z${s.zona}` : null].filter(Boolean).join(" · ");
-}
-
 /* ---------- una voce della settimana ---------- */
-registraVista("voce", { vivo: false, render(main, { giorno, id, dopoScheda }) {
+// `preset`: tipo, sottotipo e scheda già scelti (per esempio da "Aggiungila" nella vista di una scheda).
+registraVista("voce", { vivo: false, render(main, { giorno, id, preset }) {
   const esistente = id ? (stato.settimana[giorno] ?? []).find((v) => v.id === id) : null;
-  const v = { tipo: attive()[0] ?? "Forza", sottotipo: null, scheda: null, durata_min: null, zona: null, nota: "", ...esistente, ...(dopoScheda ?? {}) };
+  const v = { tipo: attive()[0] ?? "Forza", sottotipo: null, scheda: null, durata_min: null, zona: null, nota: "", ...esistente, ...(preset ?? {}) };
   const torna = () => vai("settimana");
 
   const selGiorno = el("select", { id: "v-giorno" }, GIORNI.map((g) => el("option", { value: g, selected: g === giorno }, NOMI_GIORNI[g])));
@@ -110,7 +97,7 @@ registraVista("voce", { vivo: false, render(main, { giorno, id, dopoScheda }) {
   }) : null;
 
   metti(main, 
-    testata({ titolo: esistente ? "Modifica attività" : "Nuova attività", sopra: "Settimana", indietro: torna }),
+    testata({ titolo: esistente ? "Modifica attività" : "Nuova attività", sopra: "Piano · settimana", indietro: torna }),
     el("section", { class: "card modulo" },
       el("label", { class: "campo" }, el("span", {}, "Giorno"), selGiorno),
       el("fieldset", { class: "campo" }, el("legend", {}, "Attività"), tipi),
@@ -128,7 +115,8 @@ registraVista("scheda", { vivo: false, render(main, param) {
   const esistente = param.id ? stato.schede[param.id] : null;
   const bozza = param.bozza ?? structuredClone(esistente ?? nuovaScheda(param.nuova ?? "Forza"));
   if (!esistente && !param.bozza && CARDIO.includes(bozza.tipo)) bozza.titolo = "";
-  const torna = () => vai("settimana");
+  // Si torna da dove si è partiti: la scheda letta, la settimana (scheda nuova per un giorno) o l'elenco.
+  const torna = () => (esistente ? vai("scheda-vista", { id: esistente.id }) : param.collega ? vai("settimana") : vai("schede"));
   const ridisegna = () => rivai("scheda", { ...param, bozza });
 
   const titolo = el("input", { id: "s-titolo", value: bozza.titolo ?? "", placeholder: bozza.tipo === "Forza" ? "Per esempio: Parte alta" : bozza.tipo === "HIIT" ? "Per esempio: HIIT 25'" : "Per esempio: Fondo lento", oninput: (e) => (bozza.titolo = e.target.value) });
@@ -152,7 +140,7 @@ registraVista("scheda", { vivo: false, render(main, param) {
         await salvaSettimana(s);
       }
       avviso("Scheda salvata");
-      torna();
+      if (param.collega) vai("settimana"); else vai("scheda-vista", { id });
     } catch (e) { esito(esitoS, "Non salvata: " + (e?.message ?? "errore"), "err"); salvaBtn.disabled = false; }
   };
   const elimina = esistente ? conConferma(el("button", { type: "button", class: "btn pericolo" }, "Elimina la scheda"), "Tocca di nuovo per eliminare", async () => {
@@ -162,11 +150,12 @@ registraVista("scheda", { vivo: false, render(main, param) {
     for (const g of GIORNI) s[g] = (s[g] ?? []).map((x) => { if (x.scheda !== esistente.id) return x; cambiata = true; return { ...x, scheda: null }; });
     if (cambiata) await salvaSettimana(s);
     avviso("Scheda eliminata");
-    torna();
+    vai("schede");
   }) : null;
 
   metti(main, 
-    testata({ titolo: esistente ? "Modifica scheda" : "Nuova scheda", sopra: nomeTipo(bozza.tipo === "Forza" || bozza.tipo === "HIIT" ? bozza.tipo : "Cardio"), indietro: torna }),
+    testata({ titolo: esistente ? "Modifica scheda" : param.copia ? "Copia della scheda" : "Nuova scheda",
+      sopra: bozza.tipo === "Forza" || bozza.tipo === "HIIT" ? bozza.tipo : "Cardio", indietro: torna }),
     el("section", { class: "card modulo" },
       el("label", { class: "campo" }, el("span", {}, "Nome della scheda"), titolo),
       el("label", { class: "campo" }, el("span", {}, "Nota"), nota)),
@@ -185,36 +174,64 @@ function elencoEsercizi() {
 const sposta = (lista, i, d) => { const j = i + d; if (j < 0 || j >= lista.length) return; [lista[i], lista[j]] = [lista[j], lista[i]]; };
 const piccoloBtn = (etichetta, ic, f) => el("button", { type: "button", class: "togli", "aria-label": etichetta, onclick: f }, icona(ic));
 
+const testoKg = (kg) => (kg == null ? "" : String(kg).replace(".", ","));
+const campo = (etichetta, input) => el("label", { class: "campo" }, el("span", {}, etichetta), input);
+
+// Esercizi di forza. Di solito le serie sono uguali: una riga "serie, ripetizioni, chili". Per piramidi o serie a
+// scalare si aprono le serie una per una ("Serie diverse"), e si torna indietro con "Tutte uguali".
 function editorForza(b, ridisegna) {
   b.esercizi ??= [];
   const RECUPERI = [30, 45, 60, 90, 120, 150, 180, 240];
+  const durata = el("p", { class: "sotto num" });
+  const aggiornaDurata = () => (durata.textContent = `Durata stimata: circa ${durataForza(b)} minuti, contando 40" per serie più il recupero.`);
+  aggiornaDurata();
   const schede = b.esercizi.map((e, i) => {
     e.serie ??= [{ kg: null, rip: 10 }];
+    e._diverse ??= e.serie.length > 1 && !tutteUguali(e.serie);
     const nome = el("input", { id: `s-e${i}-nome`, list: "elenco-esercizi", value: e.nome ?? "", placeholder: "Scegli o scrivi un esercizio", oninput: (ev) => (e.nome = ev.target.value) });
-    const rec = el("select", { id: `s-e${i}-rec`, onchange: (ev) => (e.recupero_s = numero(ev.target.value)) },
+    const rec = el("select", { id: `s-e${i}-rec`, onchange: (ev) => { e.recupero_s = numero(ev.target.value); aggiornaDurata(); } },
       el("option", { value: "" }, "—"), RECUPERI.map((s) => el("option", { value: s, selected: e.recupero_s === s }, s < 60 ? `${s} s` : `${s / 60} min`.replace(".5", ",5"))));
-    const griglia = el("div", { class: "griglia-scheda" },
-      el("span", { class: "intest" }, "Serie"), el("span", { class: "intest" }, "kg"), el("span", { class: "intest" }, "Ripetizioni"), el("span"),
-      e.serie.map((s, j) => [
-        el("span", { class: "n" }, String(j + 1)),
-        el("input", { id: `s-e${i}-s${j}-kg`, class: "input num", inputmode: "decimal", value: s.kg == null ? "" : String(s.kg).replace(".", ","), placeholder: "corpo libero", "aria-label": `${e.nome || "Esercizio"}, serie ${j + 1}, chili`, oninput: (ev) => (s.kg = numero(ev.target.value)) }),
-        el("input", { id: `s-e${i}-s${j}-rip`, class: "input num", inputmode: "numeric", value: s.rip ?? "", "aria-label": `${e.nome || "Esercizio"}, serie ${j + 1}, ripetizioni`, oninput: (ev) => (s.rip = numero(ev.target.value)) }),
-        piccoloBtn(`Togli la serie ${j + 1}`, ICONE.chiudi, () => { e.serie.splice(j, 1); ridisegna(); }),
-      ]));
+    const nota = el("input", { id: `s-e${i}-nota`, value: e.nota ?? "", placeholder: "Tecnica, varianti, attrezzo (facoltativa)", oninput: (ev) => (e.nota = ev.target.value) });
+
+    let serie;
+    if (!e._diverse) {
+      const v = { n: e.serie.length, rip: e.serie[0]?.rip ?? null, kg: e.serie[0]?.kg ?? null };
+      const applica = () => { e.serie = Array.from({ length: Math.max(1, Math.min(v.n ?? 1, 20)) }, () => ({ kg: v.kg, rip: v.rip })); aggiornaDurata(); };
+      serie = [
+        el("div", { class: "righe", style: "grid-template-columns:repeat(3,minmax(0,1fr))" },
+          campo("Serie", el("input", { id: `s-e${i}-n`, class: "num", inputmode: "numeric", value: v.n, oninput: (ev) => { v.n = numero(ev.target.value) ?? 1; applica(); } })),
+          campo("Ripetizioni", el("input", { id: `s-e${i}-rip`, class: "num", inputmode: "numeric", value: v.rip ?? "", oninput: (ev) => { v.rip = numero(ev.target.value); applica(); } })),
+          campo("Chili", el("input", { id: `s-e${i}-kg`, class: "num", inputmode: "decimal", value: testoKg(v.kg), placeholder: "corpo libero", oninput: (ev) => { v.kg = numero(ev.target.value); applica(); } }))),
+        el("button", { type: "button", class: "lnk", style: "justify-self:start", onclick: () => { e._diverse = true; ridisegna(); } }, "Serie diverse tra loro"),
+      ];
+    } else {
+      serie = [
+        el("div", { class: "griglia-scheda" },
+          el("span", { class: "intest" }, "Serie"), el("span", { class: "intest" }, "kg"), el("span", { class: "intest" }, "Ripetizioni"), el("span"),
+          e.serie.map((s, j) => [
+            el("span", { class: "n" }, String(j + 1)),
+            el("input", { id: `s-e${i}-s${j}-kg`, class: "input num", inputmode: "decimal", value: testoKg(s.kg), placeholder: "corpo libero", "aria-label": `${e.nome || "Esercizio"}, serie ${j + 1}, chili`, oninput: (ev) => (s.kg = numero(ev.target.value)) }),
+            el("input", { id: `s-e${i}-s${j}-rip`, class: "input num", inputmode: "numeric", value: s.rip ?? "", "aria-label": `${e.nome || "Esercizio"}, serie ${j + 1}, ripetizioni`, oninput: (ev) => (s.rip = numero(ev.target.value)) }),
+            e.serie.length > 1 ? piccoloBtn(`Togli la serie ${j + 1}`, ICONE.chiudi, () => { e.serie.splice(j, 1); ridisegna(); }) : el("span"),
+          ])),
+        el("div", { class: "azioni" },
+          el("button", { type: "button", class: "btn tratteggio piccolo", onclick: () => { const u = e.serie[e.serie.length - 1]; e.serie.push({ kg: u?.kg ?? null, rip: u?.rip ?? 10 }); ridisegna(); } }, "+ Serie"),
+          el("button", { type: "button", class: "lnk", onclick: () => { e.serie = e.serie.map(() => ({ ...e.serie[0] })); e._diverse = false; ridisegna(); } }, "Tutte uguali alla prima")),
+      ];
+    }
     return el("section", { class: "card esercizio" },
       el("div", { class: "esercizio-testa" }, el("h2", {}, `Esercizio ${i + 1}`),
         el("div", { style: "display:flex" },
           piccoloBtn("Sposta su", ICONE.su, () => { sposta(b.esercizi, i, -1); ridisegna(); }),
           piccoloBtn("Sposta giù", ICONE.giu, () => { sposta(b.esercizi, i, 1); ridisegna(); }),
           piccoloBtn("Togli l'esercizio", ICONE.cestino, () => { b.esercizi.splice(i, 1); ridisegna(); }))),
-      el("div", { class: "righe", style: "grid-template-columns:minmax(0,2fr) minmax(0,1fr)" },
-        el("label", { class: "campo" }, el("span", {}, "Esercizio"), nome),
-        el("label", { class: "campo" }, el("span", {}, "Recupero"), rec)),
-      griglia,
-      el("button", { type: "button", class: "btn tratteggio piccolo", style: "justify-self:start", onclick: () => { const u = e.serie[e.serie.length - 1]; e.serie.push({ kg: u?.kg ?? null, rip: u?.rip ?? 10 }); ridisegna(); } }, "+ Aggiungi serie"));
+      el("div", { class: "righe", style: "grid-template-columns:minmax(0,2fr) minmax(0,1fr)" }, campo("Esercizio", nome), campo("Recupero", rec)),
+      serie,
+      campo("Nota dell'esercizio", nota));
   });
   return el("div", { style: "display:grid;gap:14px" }, schede,
     el("button", { type: "button", class: "btn", onclick: () => { b.esercizi.push({ nome: "", recupero_s: 90, serie: [{ kg: null, rip: 10 }, { kg: null, rip: 10 }, { kg: null, rip: 10 }] }); ridisegna(); } }, "+ Aggiungi esercizio"),
+    durata,
     el("p", { class: "sotto" }, "I chili qui sono il punto di partenza. Quando registri, l'app ti propone i carichi dell'ultima volta."));
 }
 
@@ -254,7 +271,8 @@ function editorCardio(b, ridisegna) {
 function pulisci(b) {
   const out = { ...b, titolo: (b.titolo ?? "").trim(), nota: (b.nota ?? "").trim() };
   delete out.id;
-  if (out.tipo === "Forza") out.esercizi = (b.esercizi ?? []).filter((e) => e.nome?.trim()).map((e) => ({ nome: e.nome.trim(), recupero_s: e.recupero_s ?? null, serie: (e.serie ?? []).filter((s) => s.rip || s.kg) }));
+  if (out.tipo === "Forza") out.esercizi = (b.esercizi ?? []).filter((e) => e.nome?.trim()).map((e) => ({ nome: e.nome.trim(), recupero_s: e.recupero_s ?? null,
+    ...(e.nota?.trim() ? { nota: e.nota.trim() } : {}), serie: (e.serie ?? []).filter((s) => s.rip || s.kg).map((s) => ({ kg: s.kg ?? null, rip: s.rip ?? null })) }));
   if (out.tipo === "HIIT") out.esercizi = (b.esercizi ?? []).filter((e) => e.nome?.trim()).map((e) => ({ nome: e.nome.trim() }));
   return out;
 }

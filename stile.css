@@ -198,6 +198,21 @@ main{display:grid;gap:14px;align-content:start;padding-bottom:14px}
 .riposo{font-family:var(--font-ui);font-weight:600;font-size:14px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
 .scheda-riga{display:flex;align-items:center;gap:12px;width:100%;padding:10px 0;border:0;border-top:1px solid var(--line);background:none;color:inherit;text-align:left}
 .scheda-riga:first-of-type{border-top:0}
+.scheda-riga .freccia{font-family:var(--font-ui);font-size:26px;font-weight:600;color:var(--muted);flex:none}
+
+/* Vista di lettura di una scheda, come un foglio da palestra */
+.azioni-scheda{display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px}
+.foglio-scheda{list-style:none;margin:0;padding:0;display:grid}
+.foglio-scheda li{display:grid;grid-template-columns:34px minmax(0,1fr);column-gap:10px;row-gap:2px;padding:10px 0;border-top:1px solid var(--line);align-items:baseline}
+.foglio-scheda li:first-child{border-top:0;padding-top:2px}
+.foglio-scheda li>*:not(.n){grid-column:2}
+.foglio-scheda .n{grid-column:1;grid-row:1 / span 4;font-family:var(--font-ui);font-size:26px;font-weight:700;line-height:1;align-self:start}
+.foglio-scheda b{font-size:16px;font-weight:600}
+.foglio-scheda .serie{font-family:var(--font-ui);font-size:22px;font-weight:700;letter-spacing:.02em;line-height:1.15}
+.foglio-scheda .serie em{font-style:normal;font-size:13px;font-weight:600;color:var(--muted);margin-left:10px;letter-spacing:.08em;text-transform:uppercase}
+.foglio-scheda small{color:var(--muted);font-size:13px}
+.nota-scheda{font-size:14px;padding:9px 12px;border:2px dashed var(--line-2);border-radius:6px}
+.nota-esercizio{font-size:13px;font-style:italic;color:var(--muted)}
 
 /* Moduli */
 .modulo{display:grid;gap:14px}
