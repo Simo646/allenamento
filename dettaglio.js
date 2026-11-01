@@ -1,7 +1,7 @@
 // Un allenamento: riga negli elenchi e foglio di dettaglio (numeri, traccia, curve, zone, serie, modifica).
 import { stato, limiti, ZONE, intervalloZona, coloreTipo, nomeTipo, attive, vai } from "./stato.js";
-import { TIPI, SOTTOTIPI_BICI, volume, massimale, trovaVuoti } from "./analisi-file.js";
-import { $, el, metti, icona, ICONE, fmtData, fmtDataLunga, fmtNum, fmtDur, fmtOre, fmtPasso, fmtKg, numero, avviso, esito, conConferma, somma } from "./util.js";
+import { SOTTOTIPI_BICI, volume, massimale, trovaVuoti } from "./analisi-file.js";
+import { $, el, metti, icona, ICONE, fmtData, fmtDataLunga, fmtNum, fmtDur, fmtOre, fmtPasso, fmtKg, numero, avviso, esito, conConferma, somma, campo } from "./util.js";
 import { COLORE_ZONA, graficoTraccia, graficoCurva, graficoTempo } from "./grafici.js";
 
 export const zoneDi = (s) => [s.z1_min, s.z2_min, s.z3_min, s.z4_min, s.z5_min];
@@ -67,7 +67,7 @@ export function apriDettaglio(id) {
     ["Calorie", s.calorie, "kcal"], ["Temperatura", s.temp_media, "°C"], ["Variabilità (RMSSD)", s.rmssd_ms, "ms"],
     s.esercizi?.length ? ["Volume", fmtNum(volumeSessione(s)), "kg"] : null,
   ].filter((c) => c && c[1] != null);
-  // Griglia senza buchi, come nel diario: l'ultimo campo si allarga sulle colonne rimaste vuote.
+  // Griglia senza buchi: l'ultimo campo si allarga sulle colonne rimaste vuote.
   const colonne = campi.length === 4 ? 2 : Math.min(3, campi.length);
   const avanzo = campi.length % colonne;
   const riquadri = campi.length ? el("div", { class: "tiles riquadri", style: `grid-template-columns:repeat(${colonne},minmax(0,1fr))` },
@@ -97,7 +97,6 @@ export function apriDettaglio(id) {
     el("p", { class: "sotto" }, "Massimale stimato con la formula di Epley, dalla serie migliore.")) : null;
 
   // Modifica
-  const campo = (etichetta, input) => el("label", { class: "campo" }, el("span", {}, etichetta), input);
   const nome = el("input", { id: "d-nome", value: s.nome ?? "", placeholder: nomeTipo(s.tipo, s.sottotipo) });
   const tipo = el("select", { id: "d-tipo" }, [...new Set([...attive(), s.tipo].filter(Boolean))].map((t) => el("option", { value: t, selected: t === s.tipo }, t)));
   const sottotipo = el("select", { id: "d-sottotipo" }, el("option", { value: "" }, "Non indicato"), SOTTOTIPI_BICI.map((t) => el("option", { value: t, selected: t === s.sottotipo }, t)));

@@ -1,22 +1,36 @@
 // Registra dal vivo: cardio con GPS e fascia, HIIT con la sola fascia. Preparazione, schermata da ciclocomputer durante
 // l'allenamento, riassunto e salvataggio come un file importato. La registrazione in corso si salva ogni 10 s in
 // IndexedDB: se l'app si chiude, Oggi propone di riprenderla o salvarla. GPS e fascia arrivano da sorgenti.js.
-import { stato, registraVista, vai, testata, limiti, attive, nomeTipo, ZONE } from "./stato.js";
+import { stato, registraVista, vai, testata, limiti, attive, nomeTipo } from "./stato.js";
 import { SOTTOTIPI_BICI } from "./analisi-file.js";
-import { el, metti, oggi, fmtNum, fmtSec, fmtPasso, avviso, esito, conConferma, ricorda } from "./util.js";
+import { CARDIO } from "./dati.js";
+import { el, metti, oggi, fmtNum, fmtSec, fmtPasso, avviso, esito, conConferma, ricorda, opzione } from "./util.js";
 import { Registratore } from "./registratore.js";
-import { disponibile, avviaGps, collegaFascia, schermoAcceso, permessoNotifiche, apriImpostazioniPosizione } from "./sorgenti.js";
+import { disponibile, avviaGps, collegaFascia, schermoAcceso, permessoNotifiche, apriImpostazioniPosizione, nativo } from "./sorgenti.js";
 import { metriche, barraZone, apriDettaglio } from "./dettaglio.js";
 import { salvaRiassunto } from "./registra.js";
 import { contenutoScheda, riassuntoScheda } from "./schede.js";
 
-const CON_GPS = ["Corsa", "Camminata", "Trekking", "Bici"];
-const TIPI_VIVO = ["Corsa", "Camminata", "Trekking", "Bici", "HIIT"];
+const TIPI_VIVO = [...CARDIO, "HIIT"];
 const PAUSA_AUTO = ["Corsa", "Bici"];
 
 // Una sola registrazione alla volta, viva finché la pagina è aperta (anche cambiando vista).
-let s = null; // { rec, param, fermaGps, fascia, statoFascia, fermaSchermo, ultimoGps, erroreGps, salvataAlle, finita }
+let s = null; // { rec, param, fascia, statoFascia, fermaSchermo, ultimoGps, erroreGps, salvataAlle, finita }
 export const registrazioneInCorso = () => !!s?.rec?.avviata && !s.finita;
+
+// Un solo GPS acceso alla volta. avviaGps è asincrono: se nel frattempo ne parte un altro, o viene spento, quello in
+// ritardo si ferma appena pronto. Così non resta mai un GPS (o la notifica fissa dell'app Android) acceso per sbaglio.
+let gps = { giro: 0, ferma: null };
+function gpsAcceso(onPos, onErrore, opzioni) {
+  spegniGps();
+  const giro = gps.giro;
+  return avviaGps(onPos, onErrore, opzioni).then((ferma) => { if (giro === gps.giro) gps.ferma = ferma; else ferma(); });
+}
+function spegniGps() {
+  gps.giro++;
+  gps.ferma?.();
+  gps.ferma = null;
+}
 
 /* ---------- salvataggio della registrazione in corso ---------- */
 const db = () => new Promise((ok, ko) => {
@@ -52,7 +66,7 @@ export async function riprendiInterrotta(bozza, azione) {
   s.rec.pausa(bozza.alle);
   // Riparte in pausa: GPS di nuovo acceso, la fascia si ricollega dalla schermata, poi "Riprendi".
   if (s.rec.conGps && disponibile().gps) {
-    try { s.fermaGps = await avviaGps((p) => { s.rec.posizione(p); s.ultimoGps = p; forseSalva(); }, (t) => (s.erroreGps = t), { sfondo: true }); }
+    try { await gpsAcceso((p) => { s?.rec.posizione(p); if (s) s.ultimoGps = p; forseSalva(); }, (t) => { if (s) s.erroreGps = t; }, { sfondo: true }); }
     catch (e) { s.erroreGps = e?.message ?? "GPS non disponibile"; }
   }
   s.fermaSchermo = await schermoAcceso();
@@ -61,7 +75,11 @@ export async function riprendiInterrotta(bozza, azione) {
 export async function scartaInterrotta() { await salvaBozza(null); }
 
 /* ---------- vista ---------- */
-registraVista("dal-vivo", { vivo: false, render(main, param) {
+registraVista("dal-vivo", {
+  vivo: false,
+  // Uscendo dalla preparazione (con le schede in basso) si spengono GPS e fascia; una registrazione in corso continua.
+  lascia() { if (s && !s.rec?.avviata && !s.finita) { chiudiSorgenti(); s = null; } },
+  render(main, param) {
   const disp = disponibile();
   if (disp.inClaude || (!disp.gps && !disp.fascia)) return metti(main, testata({ titolo: "Dal vivo", sopra: "Registra", indietro: () => vai("oggi") }),
     el("section", { class: "card" }, el("p", {}, "La registrazione dal vivo usa GPS e Bluetooth del telefono, che qui non sono disponibili."),
@@ -69,7 +87,8 @@ registraVista("dal-vivo", { vivo: false, render(main, param) {
   if (s?.finita) return schermataFine(main);
   if (s?.rec?.avviata) return schermataRegistrazione(main);
   return schermataPreparazione(main, param);
-} });
+  },
+});
 
 function schermataPreparazione(main, param) {
   const disp = disponibile();
@@ -77,11 +96,10 @@ function schermataPreparazione(main, param) {
   if (!s || s.rec?.avviata) s = { rec: null, param, fascia: s?.fascia ?? null, statoFascia: s?.statoFascia ?? null };
   s.param = param;
   const scelta = s.scelta ?? (s.scelta = { tipo: tipoIniziale, sottotipo: param.voce?.sottotipo ?? null, autoPausa: PAUSA_AUTO.includes(tipoIniziale) });
-  const conGps = () => CON_GPS.includes(scelta.tipo);
+  const conGps = () => CARDIO.includes(scelta.tipo);
   s.rec = new Registratore({ tipo: scelta.tipo, sottotipo: scelta.sottotipo, conGps: conGps(), autoPausa: scelta.autoPausa, scheda: param.voce?.scheda ?? null });
   const ridisegna = () => schermataPreparazione(main, param);
 
-  const opzione = (gruppo, valore, testo, attivo, onchange) => el("label", {}, el("input", { type: "radio", name: gruppo, value: valore, checked: attivo, onchange }), el("span", {}, testo));
   const tipi = el("div", { class: "seg", role: "radiogroup", "aria-label": "Attività" },
     TIPI_VIVO.filter((t) => attive().includes(t) || t === scelta.tipo).map((t) => opzione("dv-tipo", t, t, scelta.tipo === t, () => { scelta.tipo = t; scelta.autoPausa = PAUSA_AUTO.includes(t); if (t !== "Bici") scelta.sottotipo = null; ridisegna(); })));
   const sotto = scelta.tipo === "Bici" ? el("div", { class: "seg", role: "radiogroup", "aria-label": "Bici" },
@@ -90,17 +108,22 @@ function schermataPreparazione(main, param) {
     el("span", {}, el("b", {}, "Pausa automatica da fermo"), el("small", {}, "Come il ciclocomputer: quando ti fermi il tempo si ferma.")),
     el("input", { type: "checkbox", role: "switch", id: "dv-auto", checked: scelta.autoPausa, onchange: (e) => { scelta.autoPausa = e.target.checked; s.rec.autoPausa = e.target.checked; } })) : null;
 
-  // GPS: parte subito per avere il segnale pronto; la precisione si vede prima di partire.
+  // GPS: parte subito per avere il segnale pronto; la precisione si vede prima di partire. Se il permesso è negato,
+  // nell'app Android compare il collegamento alle impostazioni.
   const statoGps = el("p", { class: "stato-sorgente" }, conGps() ? "GPS: cerco il segnale…" : "Senza GPS: registro tempo e battito.");
-  s.fermaGps?.();
-  s.fermaGps = null;
+  const impostazioniGps = el("button", { type: "button", class: "lnk", hidden: true, onclick: apriImpostazioniPosizione }, "Apri le impostazioni");
+  const erroreGps = (testo) => {
+    if (!statoGps.isConnected) return;
+    statoGps.textContent = "GPS: " + testo;
+    impostazioniGps.hidden = !(nativo() && /permesso/i.test(testo));
+  };
   if (conGps() && disp.gps) {
-    avviaGps((p) => {
-      s.rec?.posizione(p);
-      s.ultimoGps = p;
+    gpsAcceso((p) => {
+      s?.rec?.posizione(p);
+      if (s) s.ultimoGps = p;
       if (statoGps.isConnected) statoGps.textContent = p.precisione != null && p.precisione > 30 ? `GPS: segnale debole, ±${Math.round(p.precisione)} m` : `GPS pronto, ±${Math.round(p.precisione ?? 0)} m`;
-    }, (testo) => { if (statoGps.isConnected) statoGps.textContent = "GPS: " + testo; }).then((ferma) => (s.fermaGps = ferma)).catch((e) => (statoGps.textContent = "GPS: " + (e?.message ?? "non disponibile")));
-  }
+    }, erroreGps).catch((e) => erroreGps(e?.message ?? "non disponibile"));
+  } else spegniGps();
 
   // Fascia
   const battito = el("b", { class: "num" }, "");
@@ -128,12 +151,12 @@ function schermataPreparazione(main, param) {
   const avvia = el("button", { type: "button", class: "btn primario grande" }, "Avvia");
   avvia.onclick = async () => {
     if (!conGps() && !s.fascia) return esito(esitoAvvio, "Per l'HIIT senza GPS serve la fascia.", "err");
+    avvia.disabled = true; // un secondo tocco non deve far partire due registrazioni
     await permessoNotifiche();
     s.rec.avvia(Date.now());
     // Nell'app Android il GPS riparte in modalità "anche a schermo spento", con la notifica fissa.
     if (conGps() && disp.gps) {
-      s.fermaGps?.();
-      try { s.fermaGps = await avviaGps((p) => { s.rec.posizione(p); s.ultimoGps = p; forseSalva(); }, (t) => (s.erroreGps = t), { sfondo: true }); }
+      try { await gpsAcceso((p) => { s?.rec.posizione(p); if (s) s.ultimoGps = p; forseSalva(); }, (t) => { if (s) s.erroreGps = t; }, { sfondo: true }); }
       catch (e) { s.erroreGps = e?.message ?? "GPS non disponibile"; }
     }
     s.fermaSchermo = await schermoAcceso();
@@ -152,8 +175,7 @@ function schermataPreparazione(main, param) {
     el("section", { class: "card modulo" },
       el("fieldset", { class: "campo" }, el("legend", {}, "Attività"), tipi),
       sotto, autoPausa),
-    el("section", { class: "card modulo" }, el("h2", {}, "Sensori"), statoGps, boxFascia,
-      statoGps.textContent.startsWith("GPS: Permesso") ? el("button", { type: "button", class: "lnk", onclick: apriImpostazioniPosizione }, "Apri le impostazioni") : null),
+    el("section", { class: "card modulo" }, el("h2", {}, "Sensori"), statoGps, impostazioniGps, boxFascia),
     schedaBox(param),
     avvisoSfondo,
     el("div", { class: "azioni" }, avvia, esitoAvvio),
@@ -172,7 +194,7 @@ function schedaBox(param) {
 
 function chiudiSorgenti() {
   clearInterval(s?.timer);
-  s?.fermaGps?.();
+  spegniGps();
   s?.fascia?.scollega?.();
   s?.fermaSchermo?.();
 }
@@ -180,13 +202,14 @@ function chiudiSorgenti() {
 /* ---------- durante ---------- */
 function schermataRegistrazione(main) {
   const r = s.rec, conGps = r.conGps, corsaPasso = ["Corsa", "Camminata", "Trekking"].includes(r.tipo);
-  const campo = (etichetta, unita) => {
-    const v = el("b", { class: "num" }, "—"), u = el("em", {}, unita ?? "");
-    return { nodo: el("div", { class: "campo-vivo" }, el("small", {}, etichetta), el("div", {}, v, u)), v, u };
+  // Un campo dati grande come sul ciclocomputer: etichetta, numero e unità.
+  const campoVivo = (etichetta, unita) => {
+    const v = el("b", { class: "num" }, "—");
+    return { nodo: el("div", { class: "campo-vivo" }, el("small", {}, etichetta), el("div", {}, v, el("em", {}, unita ?? ""))), v };
   };
-  const tempo = campo("Tempo"), distanza = campo("Distanza", "km"), fc = campo("Battito", "bpm"), vel = campo(corsaPasso ? "Passo" : "Velocità", corsaPasso ? "/km" : "km/h"),
-    salita = campo("Salita", "m"), media = campo(conGps ? (corsaPasso ? "Passo medio" : "Velocità media") : "FC media", conGps ? (corsaPasso ? "/km" : "km/h") : "bpm");
-  const zona = campo("Zona");
+  const tempo = campoVivo("Tempo"), distanza = campoVivo("Distanza", "km"), fc = campoVivo("Battito", "bpm"), vel = campoVivo(corsaPasso ? "Passo" : "Velocità", corsaPasso ? "/km" : "km/h"),
+    salita = campoVivo("Salita", "m"), media = campoVivo(conGps ? (corsaPasso ? "Passo medio" : "Velocità media") : "FC media", conGps ? (corsaPasso ? "/km" : "km/h") : "bpm");
+  const zona = campoVivo("Zona");
   const campi = conGps ? [tempo, distanza, fc, vel, salita, media] : [tempo, fc, zona, media];
   const stato1 = el("p", { class: "stato-sorgente" });
   const fascione = el("div", { class: "fascione-pausa", hidden: true });

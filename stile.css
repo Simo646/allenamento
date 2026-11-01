@@ -104,21 +104,21 @@ main{display:grid;gap:14px;align-content:start;padding-bottom:14px}
 .dot{width:10px;height:10px;border-radius:50%;flex:none;display:inline-block}
 
 /* Oggi: il programma come la pagina principale del ciclocomputer */
-.turno{border:var(--tratto);border-radius:var(--r);overflow:hidden}
-.turno-barra{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;padding:12px 14px;background:var(--barra-bg);color:var(--barra-ink)}
-.turno-barra .etichetta{color:var(--barra-muted)}
-.nome-turno{font-family:var(--font-ui);font-weight:700;font-size:clamp(46px,14vw,64px);line-height:.9;text-transform:uppercase;letter-spacing:.01em}
-.nome-turno.lungo{font-size:clamp(32px,9.5vw,48px)}
+.programma-oggi{border:var(--tratto);border-radius:var(--r);overflow:hidden}
+.programma-barra{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;padding:12px 14px;background:var(--barra-bg);color:var(--barra-ink)}
+.programma-barra .etichetta{color:var(--barra-muted)}
+.programma-nome{font-family:var(--font-ui);font-weight:700;font-size:clamp(46px,14vw,64px);line-height:.9;text-transform:uppercase;letter-spacing:.01em}
+.programma-nome.lungo{font-size:clamp(32px,9.5vw,48px)}
 .zone-box{display:flex;gap:6px;flex:none}
 .zona-box{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:64px;height:56px;padding:0 8px;border-radius:6px;font-family:var(--font-ui)}
 .zona-box b{font-size:26px;font-weight:700;line-height:1}
 .zona-box span{font-size:11px;font-weight:600;letter-spacing:.04em}
 .zona-box.forza{background:var(--barra-muted);color:var(--barra-bg)}
-.turno .voci{padding:4px 14px}
-.turno .voce-oggi{padding:10px 0}
-.turno .voce-oggi+.voce-oggi{border-top:1px solid var(--line)}
-.turno-piede{display:flex;justify-content:flex-end;padding:8px 14px;border-top:var(--tratto)}
-.turno>.vuoto{padding:12px 14px}
+.programma-oggi .voci{padding:4px 14px}
+.programma-oggi .voce-oggi{padding:10px 0}
+.programma-oggi .voce-oggi+.voce-oggi{border-top:1px solid var(--line)}
+.programma-piede{display:flex;justify-content:flex-end;padding:8px 14px;border-top:var(--tratto)}
+.programma-oggi>.vuoto{padding:12px 14px}
 
 /* Striscia della settimana */
 .striscia{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border:var(--tratto);border-radius:var(--r);overflow:hidden}

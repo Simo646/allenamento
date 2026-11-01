@@ -2,6 +2,8 @@
 <html lang="it">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://cdn.jsdelivr.net; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Allenamento su misura</title>
 <meta name="description" content="Programma la settimana, registra forza serie per serie e uscite dai file del dispositivo, e segui i progressi sulle tue zone di battito.">
@@ -13,9 +15,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icone/icona-192.png" type="image/png">
 <link rel="apple-touch-icon" href="icone/apple-touch-icon.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="fonti/fonti.css">
 <style>:root{padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}body{margin:0}</style>
 <link rel="stylesheet" href="stile.css">
 </head>
@@ -41,6 +41,6 @@
 <div class="avviso" id="avviso" role="status" hidden></div>
 
 <script type="module" src="app.js"></script>
-<script>if ("serviceWorker" in navigator) addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));</script>
+<script src="registra-sw.js"></script>
 </body>
 </html>

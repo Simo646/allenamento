@@ -1,13 +1,12 @@
 // Piano › Schede: l'elenco delle schede e la vista di lettura di una scheda, compatta come un foglio da palestra,
 // con Inizia (registra subito), Modifica e Duplica. L'editor sta in settimana.js.
 import { stato, registraVista, vai, testata, iconaTipo, nomeTipo, attive, chipZona, intervalloZona } from "./stato.js";
-import { GIORNI, NOMI_GIORNI, durataHiit, durataForza, riassuntoSerie, ultimaVolta, giornoDi } from "./dati.js";
+import { GIORNI, NOMI_GIORNI, CARDIO, durataHiit, durataForza, riassuntoSerie, ultimaVolta, giornoDi } from "./dati.js";
 import { TIPI } from "./analisi-file.js";
 import { el, metti, oggi, fmtGiorno, fmtData, ricorda } from "./util.js";
 import { apriDettaglio, metriche } from "./dettaglio.js";
 import { disponibile } from "./sorgenti.js";
 
-export const CARDIO = ["Corsa", "Camminata", "Trekking", "Bici"];
 const fmtRec = (s) => (s < 60 ? `${s}"` : `${String(s / 60).replace(".", ",")}'`);
 
 // Le due parti del Piano, in cima a entrambe; l'ultima scelta resta per la prossima volta.

@@ -1,10 +1,10 @@
 // Piano › Settimana (lunedì-domenica), le voci dei giorni e l'editor delle schede. L'elenco e la vista di lettura
 // delle schede stanno in schede.js.
 import { stato, registraVista, vai, rivai, testata, salvaSettimana, iconaTipo, nomeTipo, attive, descriviVoce, intervalloZona } from "./stato.js";
-import { GIORNI, NOMI_GIORNI, ESERCIZI, nuovaScheda, durataHiit, durataForza, statoVoci, spostaVoce, idCasuale, tutteUguali } from "./dati.js";
+import { GIORNI, NOMI_GIORNI, ESERCIZI, CARDIO, nuovaScheda, durataHiit, durataForza, statoVoci, spostaVoce, idCasuale, tutteUguali } from "./dati.js";
 import { SOTTOTIPI_BICI } from "./analisi-file.js";
-import { el, metti, icona, ICONE, oggi, piuGiorni, lunediDi, fmtData, numero, avviso, esito, conConferma } from "./util.js";
-import { sceltaPiano, CARDIO } from "./schede.js";
+import { el, metti, icona, ICONE, oggi, piuGiorni, lunediDi, fmtData, numero, avviso, esito, conConferma, campo, opzione, testoKg } from "./util.js";
+import { sceltaPiano } from "./schede.js";
 
 /* ---------- Settimana ---------- */
 registraVista("settimana", { vivo: true, render(main) {
@@ -48,8 +48,6 @@ registraVista("voce", { vivo: false, render(main, { giorno, id, preset }) {
   const campoSotto = el("fieldset", { class: "campo" }, el("legend", {}, "Bici"), sotto);
   const campoDurata = el("label", { class: "campo" }, el("span", {}, "Durata obiettivo (min)"), durata);
   const campoZona = el("fieldset", { class: "campo" }, el("legend", {}, "Zona obiettivo"), zone);
-  const opzione = (gruppo, valore, testo, attivo, onchange) =>
-    el("label", {}, el("input", { type: "radio", name: gruppo, value: valore, checked: attivo, onchange }), el("span", {}, testo));
 
   function aggiorna() {
     tipi.replaceChildren(...attive().map((t) => opzione("v-tipo", t, t, v.tipo === t, () => { v.tipo = t; v.scheda = null; aggiorna(); })));
@@ -174,8 +172,6 @@ function elencoEsercizi() {
 const sposta = (lista, i, d) => { const j = i + d; if (j < 0 || j >= lista.length) return; [lista[i], lista[j]] = [lista[j], lista[i]]; };
 const piccoloBtn = (etichetta, ic, f) => el("button", { type: "button", class: "togli", "aria-label": etichetta, onclick: f }, icona(ic));
 
-const testoKg = (kg) => (kg == null ? "" : String(kg).replace(".", ","));
-const campo = (etichetta, input) => el("label", { class: "campo" }, el("span", {}, etichetta), input);
 
 // Esercizi di forza. Di solito le serie sono uguali: una riga "serie, ripetizioni, chili". Per piramidi o serie a
 // scalare si aprono le serie una per una ("Serie diverse"), e si torna indietro con "Tutte uguali".
@@ -255,7 +251,6 @@ function editorHiit(b, ridisegna) {
 
 function editorCardio(b, ridisegna) {
   const tipi = CARDIO.filter((t) => attive().includes(t) || t === b.tipo);
-  const opzione = (gruppo, valore, testo, attivo, onchange) => el("label", {}, el("input", { type: "radio", name: gruppo, value: valore, checked: attivo, onchange }), el("span", {}, testo));
   return el("section", { class: "card modulo" },
     el("fieldset", { class: "campo" }, el("legend", {}, "Attività"),
       el("div", { class: "seg" }, tipi.map((t) => opzione("s-tipo", t, t, b.tipo === t, () => { b.tipo = t; if (t !== "Bici") b.sottotipo = null; ridisegna(); })))),

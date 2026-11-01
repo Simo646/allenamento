@@ -2,16 +2,14 @@
 import { stato, registraVista, vai, rivai, testata, salvaGiorno, limiti, nomeTipo, coloreTipo, attive, modulo } from "./stato.js";
 import { precompilaEsercizio, vociDelGiorno, ESERCIZI } from "./dati.js";
 import { riassumiFit, riassumiXml, idSessione, CAMPI_FILE, CAMPI_DETTAGLIO, TIPI, SOTTOTIPI_BICI, volume } from "./analisi-file.js";
-import { $, el, metti, icona, ICONE, oggi, fmtData, fmtGiorno, fmtNum, fmtKg, fmtSec, fmtDur, numero, avviso, esito, ricorda, conConferma } from "./util.js";
+import { $, el, metti, icona, ICONE, oggi, fmtData, fmtGiorno, fmtNum, fmtKg, fmtSec, numero, avviso, esito, ricorda, conConferma, campo, opzione, testoKg } from "./util.js";
+import { caricaLettoreFit } from "./lettore-fit.js";
 import { metriche, barraZone } from "./dettaglio.js";
 import { contenutoScheda, riassuntoScheda } from "./schede.js";
 import { Registratore } from "./registratore.js";
 import { disponibile, collegaFascia } from "./sorgenti.js";
 
-const FIT_SDK = "https://cdn.jsdelivr.net/npm/@garmin/fitsdk@21.218.0/+esm";
 const occupato = (id) => stato.sessioni.some((s) => s.id === id);
-const opzione = (gruppo, valore, testo, attivo, onchange) => el("label", {}, el("input", { type: "radio", name: gruppo, value: valore, checked: attivo, onchange }), el("span", {}, testo));
-const campo = (etichetta, input, aiuto) => el("label", { class: "campo" }, el("span", {}, etichetta), input, aiuto ? el("small", {}, aiuto) : null);
 
 registraVista("registra", { vivo: false, render(main, param) {
   if (param.tipo === "forza") return moduloForza(main, param);
@@ -209,7 +207,6 @@ function dallaScheda(id, data) {
   const s = id ? stato.schede[id] : null;
   return (s?.esercizi ?? []).map((e) => precompilaEsercizio(e, stato.sessioni, data));
 }
-const testoKg = (kg) => (kg == null ? "" : String(kg).replace(".", ","));
 const fmtSerie = (s) => (s.kg ? `${fmtKg(s.kg)}×${s.rip ?? "—"}` : `${s.rip ?? "—"} rip`);
 // Con almeno una serie spuntata nella sessione si salvano solo le spuntate; altrimenti tutte quelle compilate.
 function serieDaSalvare(e, b) {
@@ -291,8 +288,8 @@ function formFile(param) {
       try {
         let r;
         if (/\.fit$/i.test(f.name)) {
-          try { sdk ??= await import(FIT_SDK); }
-          catch { throw new Error("non riesco a caricare il lettore FIT: controlla la connessione"); }
+          try { sdk ??= await caricaLettoreFit(); }
+          catch (e) { throw new Error(e?.message?.startsWith("il lettore") || e?.message?.startsWith("non riesco") ? e.message : "non riesco a caricare il lettore FIT: controlla la connessione"); }
           const { messages, errors } = new sdk.Decoder(sdk.Stream.fromArrayBuffer(await f.arrayBuffer())).read();
           if (!messages.sessionMesgs?.length) throw new Error(errors?.[0]?.message ?? "file illeggibile");
           r = riassumiFit(messages, { limiti: limiti(), nomeFile: f.name });

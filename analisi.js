@@ -1,13 +1,12 @@
 // Analisi: volume e zone per settimana, distanze, andamento per attività, forza per esercizio, sonno, ossigeno, peso.
-import { stato, registraVista, rivai, testata, coloreTipo, nomeTipo, modulo, limiti, intervalloZona, ZONE } from "./stato.js";
-import { recupero } from "./dati.js";
+import { stato, registraVista, rivai, testata, coloreTipo, modulo, limiti, intervalloZona, ZONE } from "./stato.js";
+import { recupero, CARDIO } from "./dati.js";
 import { TIPI, volume, massimale } from "./analisi-file.js";
 import { el, metti, oggi, piuGiorni, lunediDi, fmtData, fmtGiorno, fmtNum, fmtDur, fmtKg, fmtSec, somma } from "./util.js";
 import { COLORE_ZONA, graficoColonne, graficoLinea, graficoIntervalli, vuoto } from "./grafici.js";
 import { zoneDi, haZone, conPasso, volumeSessione } from "./dettaglio.js";
 
 const scelte = { settimane: 8, andamento: null, esercizio: null };
-const CARDIO = ["Corsa", "Camminata", "Trekking", "Bici"];
 
 registraVista("analisi", { vivo: true, render(main) {
   const d = oggi();

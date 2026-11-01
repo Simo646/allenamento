@@ -16,8 +16,14 @@ Dopo il primo avvio l'app funziona anche senza rete.
 
 ## Dove stanno i dati
 
-Solo sul tuo telefono, nella memoria dell'app. Non vengono inviati da nessuna parte: questo sito contiene solo il programma.
-Per non perderli, ogni tanto apri **Impostazioni › I tuoi dati › Esporta un backup** e salva il file su Drive, iCloud o Dropbox.
+Allenamenti, schede, tracce GPS e misure restano solo sul tuo telefono, nella memoria dell'app: l'app non ha un server
+e non li invia da nessuna parte. Anche i file FIT, GPX e TCX che importi si leggono sul telefono, senza caricarli.
+
+Come per ogni sito, chi lo ospita vede l'indirizzo IP di chi lo apre: GitHub per l'app e jsDelivr per il lettore dei
+file FIT, scaricato alla prima apertura. L'app Android, all'avvio, chiede a GitHub se c'è una versione nuova.
+
+Per non perderli, ogni tanto apri **Impostazioni › I tuoi dati › Esporta un backup** e salva il file in un posto
+privato (Drive, iCloud, Dropbox): contiene anche le tracce GPS, che mostrano da dove parti.
 Su un telefono nuovo, al primo avvio scegli **Importa un backup**.
 
 ## Cosa fa
@@ -33,4 +39,4 @@ Su un telefono nuovo, al primo avvio scegli **Importa un backup**.
 
 ## Note
 
-Il lettore dei file FIT è il [Garmin FIT JavaScript SDK](https://www.npmjs.com/package/@garmin/fitsdk), caricato da jsDelivr alla prima apertura e soggetto alla licenza FIT di Garmin. I caratteri sono Barlow e Barlow Semi Condensed (SIL Open Font License), da Google Fonts.
+Il lettore dei file FIT è il [Garmin FIT JavaScript SDK](https://www.npmjs.com/package/@garmin/fitsdk), caricato da jsDelivr alla prima apertura e soggetto alla licenza FIT di Garmin: l'app controlla che ogni file sia identico all'originale prima di usarlo. I caratteri sono Barlow e Barlow Semi Condensed (SIL Open Font License, testo in `fonti/`), inclusi nel sito.

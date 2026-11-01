@@ -57,17 +57,17 @@ function cardProgramma(d, voci, fuori) {
       el("button", { type: "button", class: "voce-testo", onclick: () => apriDettaglio(s.id) },
         el("b", {}, s.nome || nomeTipo(s.tipo, s.sottotipo)), el("span", { class: "num" }, "Fuori programma · " + metriche(s))),
       fattoSegno())));
-  // Come il turno nel diario: barra nera con le attività del giorno in grande e i riquadri delle zone obiettivo.
+  // Barra nera con le attività del giorno in grande e i riquadri delle zone obiettivo, come la pagina di un ciclocomputer.
   const tipi = [...new Set(voci.map((v) => v.tipo))];
   const nome = tipi.length ? tipi.join(" + ") : "Riposo";
   const zone = [...new Set(voci.filter((v) => v.tipo !== "Forza").map((v) => descriviVoce(v).zona).filter(Boolean))].sort();
-  return el("section", { class: "turno", "aria-label": "In programma oggi" },
-    el("div", { class: "turno-barra" },
-      el("div", { style: "min-width:0" }, el("div", { class: "etichetta" }, "In programma oggi"), el("div", { class: "nome-turno" + (nome.length > 9 ? " lungo" : "") }, nome)),
+  return el("section", { class: "programma-oggi", "aria-label": "In programma oggi" },
+    el("div", { class: "programma-barra" },
+      el("div", { style: "min-width:0" }, el("div", { class: "etichetta" }, "In programma oggi"), el("div", { class: "programma-nome" + (nome.length > 9 ? " lungo" : "") }, nome)),
       zonaBox(zone, tipi.includes("Forza"))),
     righe.length ? el("div", { class: "voci" }, righe)
       : el("p", { class: "vuoto" }, "Giorno di riposo. Se ti alleni lo stesso, registralo con i pulsanti qui sotto."),
-    el("div", { class: "turno-piede" }, el("button", { type: "button", class: "lnk", onclick: () => vai("settimana") }, "Tutta la settimana")));
+    el("div", { class: "programma-piede" }, el("button", { type: "button", class: "lnk", onclick: () => vai("settimana") }, "Tutta la settimana")));
 }
 
 // Riquadri delle zone nel colore della zona; per la sola forza un riquadro neutro.
@@ -248,7 +248,9 @@ if (nativo()) (async () => {
   try {
     const qui = await (await fetch("versione.json")).json();
     const sito = await (await fetch("https://simo646.github.io/allenamento/android/versione.json", { cache: "no-store" })).json();
-    if (sito.codice > qui.codice) { stato.aggiornamento = sito; programmaRender(); }
+    // Il collegamento si accetta solo se porta alla pagina dell'app sul sito (mai un indirizzo qualsiasi letto dalla rete).
+    const pagina = "https://simo646.github.io/allenamento/android/";
+    if (Number(sito.codice) > Number(qui.codice)) { stato.aggiornamento = { versione: String(sito.versione).slice(0, 20), pagina }; programmaRender(); }
   } catch { /* senza rete si controlla la prossima volta */ }
 })();
 

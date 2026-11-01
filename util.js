@@ -16,6 +16,13 @@ export function el(tag, attrs = {}, ...figli) {
   return e;
 }
 
+// Pezzi di modulo usati in tutte le viste: etichetta con il suo campo (e una riga di aiuto facoltativa), una scelta di un
+// gruppo di pulsanti radio nello stile .seg, i chili scritti con la virgola nelle caselle.
+export const campo = (etichetta, input, aiuto) => el("label", { class: "campo" }, el("span", {}, etichetta), input, aiuto ? el("small", {}, aiuto) : null);
+export const opzione = (gruppo, valore, testo, attivo, onchange) =>
+  el("label", {}, el("input", { type: "radio", name: gruppo, value: valore, checked: attivo, onchange }), el("span", {}, testo));
+export const testoKg = (kg) => (kg == null ? "" : String(kg).replace(".", ","));
+
 // Sostituisce il contenuto di un nodo saltando i pezzi assenti (replaceChildren scriverebbe "null").
 export const metti = (nodo, ...figli) => nodo.replaceChildren(...figli.flat(Infinity).filter((f) => f != null && f !== false));
 
@@ -113,4 +120,5 @@ export function conConferma(pulsante, testoConferma, azione) {
 export const ricorda = {
   leggi(k) { try { return JSON.parse(localStorage.getItem("allenamento." + k)); } catch { return null; } },
   scrivi(k, v) { try { v == null ? localStorage.removeItem("allenamento." + k) : localStorage.setItem("allenamento." + k, JSON.stringify(v)); } catch { /* niente */ } },
+  svuota() { try { for (const k of Object.keys(localStorage)) if (k.startsWith("allenamento.")) localStorage.removeItem(k); } catch { /* niente */ } },
 };

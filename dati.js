@@ -2,6 +2,7 @@
 // Le viste li usano, i test in node li provano.
 
 export const GIORNI = ["lun", "mar", "mer", "gio", "ven", "sab", "dom"];
+export const CARDIO = ["Corsa", "Camminata", "Trekking", "Bici"]; // attività con GPS, distanza e passo o velocità
 export const NOMI_GIORNI = { lun: "Lunedì", mar: "Martedì", mer: "Mercoledì", gio: "Giovedì", ven: "Venerdì", sab: "Sabato", dom: "Domenica" };
 export const VERSIONE_BACKUP = 1;
 

@@ -60,6 +60,7 @@ const SCHEDA_DI = { oggi: "oggi", registra: "oggi", "dal-vivo": "oggi", settiman
 export function registraVista(nome, def) { viste[nome] = def; }
 
 export function vai(nome, param = {}) {
+  if (stato.vista !== nome) viste[stato.vista]?.lascia?.(); // la vista che si chiude può spegnere ciò che usava
   stato.vista = nome;
   stato.param = param;
   document.body.classList.remove("con-barra");

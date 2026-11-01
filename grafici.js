@@ -1,4 +1,4 @@
-// Grafici SVG, ripresi dal Diario di allenamento. Ogni grafico parte da pianoGrafico() e usa gli stessi pezzi:
+// Grafici SVG. Ogni grafico parte da pianoGrafico() e usa gli stessi pezzi:
 // tacche(), asseY(), etichetteDate(), sensibile() per il riquadro informativo, legenda().
 import { el, sv, ms, fmtData } from "./util.js";
 import { zonaDi, mondo, metriPerPixel } from "./analisi-file.js";

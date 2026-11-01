@@ -2,11 +2,11 @@
 import { stato, registraVista, vai, rivai, testata, salvaProfilo, salvaSettimana, ZONE, coloreTipo, limiti } from "./stato.js";
 import { PROFILO_PREDEFINITO, MODELLI_SETTIMANA, settimanaDaModello, etaDa, creaBackup, validaBackup, COLLEZIONI, GIORNI } from "./dati.js";
 import { calcolaZone, fcMaxDaEta, zoneDaCurva, validaLimiti, TIPI } from "./analisi-file.js";
-import { el, metti, oggi, fmtNum, numero, avviso, esito, conConferma } from "./util.js";
+import { el, metti, oggi, numero, avviso, esito, conConferma, campo, ricorda } from "./util.js";
 import { nativo, condividiFile } from "./sorgenti.js";
+import { scartaInterrotta } from "./dal-vivo.js";
 
 const ANNO = new Date().getFullYear();
-const campo = (etichetta, input, aiuto) => el("label", { class: "campo" }, el("span", {}, etichetta), input, aiuto ? el("small", {}, aiuto) : null);
 const numInput = (id, valore, ph, onv) => el("input", { id, inputmode: "numeric", value: valore ?? "", placeholder: ph ?? "", oninput: (e) => onv(numero(e.target.value)) });
 
 /* ---------- blocco zone, comune ad avvio e impostazioni ---------- */
@@ -300,6 +300,10 @@ function cardDati() {
   const cancella = conConferma(el("button", { type: "button", class: "btn pericolo" }, "Cancella tutti i dati"), "Tocca di nuovo: cancello tutto", async () => {
     try {
       for (const c of [...COLLEZIONI, "config"]) for (const d of await stato.archivio.elenco(c)) await stato.archivio.elimina(c, d.id);
+      // Anche ciò che resta solo su questo dispositivo: registrazione interrotta, bozza della forza, preferenze.
+      await scartaInterrotta();
+      stato.interrotta = null;
+      ricorda.svuota();
       avviso("Dati cancellati");
       vai("avvio");
     } catch (e) { esito(esitoD, "Cancellazione interrotta: " + (e?.message ?? "errore"), "err"); }
@@ -308,6 +312,7 @@ function cardDati() {
   return el("section", { class: "card modulo" }, el("h2", {}, "I tuoi dati"),
     el("p", { class: "sotto" }, testoModo),
     el("div", { class: "azioni" }, esporta, scegli, importa),
+    el("p", { class: "sotto" }, "Il backup contiene anche le tracce GPS, che mostrano da dove parti: salvalo in un posto privato e non condividerlo."),
     esitoD,
     el("div", { class: "azioni", style: "border-top:1px solid var(--line);padding-top:12px" }, cancella));
 }
