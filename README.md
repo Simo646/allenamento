@@ -11,6 +11,8 @@ Programma la settimana, registra forza serie per serie e uscite dai file del dis
 
 Dopo il primo avvio l'app funziona anche senza rete.
 
+**App Android:** per registrare anche a schermo spento c'è l'app da installare, nella pagina [Allenamento per Android](https://simo646.github.io/allenamento/android/).
+
 
 ## Dove stanno i dati
 
