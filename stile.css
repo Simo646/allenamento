@@ -200,6 +200,25 @@ main{display:grid;gap:14px;align-content:start;padding-bottom:14px}
 .scheda-riga:first-of-type{border-top:0}
 .scheda-riga .freccia{font-family:var(--font-ui);font-size:26px;font-weight:600;color:var(--muted);flex:none}
 
+/* Registrazione dal vivo: campi dati grandi come sulla pagina principale del ROAM */
+.btn.grande{min-height:56px;font-size:18px;padding:8px 22px}
+.stato-sorgente{font-family:var(--font-ui);font-weight:600;font-size:14px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.fascia-riga{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.fascia-riga>span{display:grid}
+.fascia-riga small{font-family:var(--font-ui);font-weight:600;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.fascia-riga b{font-family:var(--font-ui);font-size:22px;font-weight:700}
+.testata-vivo{display:flex;justify-content:space-between;align-items:center;min-height:44px;border-bottom:var(--tratto);font-family:var(--font-ui);font-weight:700;font-size:18px;letter-spacing:.08em;text-transform:uppercase}
+.campi-vivo{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px;background:var(--ink);border:var(--tratto);border-radius:var(--r-s);overflow:hidden}
+.campo-vivo{background:var(--bg);padding:10px 12px 12px;display:flex;flex-direction:column;min-width:0}
+.campo-vivo small{font-family:var(--font-ui);font-weight:600;font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.campo-vivo b{font-family:var(--font-ui);font-size:clamp(40px,13vw,64px);font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+.campo-vivo em{font-style:normal;font-family:var(--font-ui);font-size:16px;font-weight:600;margin-left:4px;text-transform:uppercase}
+.campi-vivo>.campo-vivo:first-child{grid-column:1 / -1}
+.campi-vivo>.campo-vivo:first-child b{font-size:clamp(56px,19vw,92px)}
+.campi-vivo>.campo-vivo:last-child:nth-child(even){grid-column:1 / -1}
+.fascione-pausa{background:var(--ink);color:var(--bg);text-align:center;padding:10px;border-radius:var(--r-s);font-family:var(--font-ui);font-weight:700;font-size:22px;letter-spacing:.12em;text-transform:uppercase}
+.comandi-vivo{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+
 /* Vista di lettura di una scheda, come un foglio da palestra */
 .azioni-scheda{display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px}
 .foglio-scheda{list-style:none;margin:0;padding:0;display:grid}

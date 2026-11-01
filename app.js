@@ -9,6 +9,9 @@ import "./settimana.js";
 import "./registra.js";
 import "./analisi.js";
 import "./impostazioni.js";
+import { leggiBozza, riprendiInterrotta, scartaInterrotta, registrazioneInCorso } from "./dal-vivo.js";
+import { disponibile, nativo } from "./sorgenti.js";
+import { conConferma } from "./util.js";
 
 /* ---------- Oggi ---------- */
 const aperte = new Set(); // voci con la scheda aperta
@@ -22,6 +25,8 @@ registraVista("oggi", { vivo: true, render(main) {
 
   metti(main, 
     testata({ titolo: "Oggi" }),
+    bandaInterrotta(),
+    bandaAggiornamento(),
     striscia(d),
     cardProgramma(d, voci, fuori),
     azioniRapide(),
@@ -79,6 +84,7 @@ function rigaVoce(d, v) {
   const aperta = aperte.has(v.id);
   const azione = v.fatta ? fattoSegno()
     : v.tipo === "Forza" ? el("button", { type: "button", class: "btn primario piccolo", onclick: () => vai("registra", { tipo: "forza", scheda: v.scheda, data: d }) }, "Registra")
+    : dalVivo() ? el("button", { type: "button", class: "btn primario piccolo", onclick: () => vai("dal-vivo", { voce: v }) }, "Inizia")
     : el("button", { type: "button", class: "btn piccolo", onclick: () => vai("registra", { tipo: "file", data: d, voce: v }) }, v.tipo === "HIIT" ? "Registra" : "Importa");
   const dettaglio = [];
   // Si apre solo se c'è qualcosa da leggere: esercizi, tempi o una nota.
@@ -97,9 +103,33 @@ function rigaVoce(d, v) {
 }
 
 
+// Registrazione dal vivo: solo dove GPS o fascia funzionano (app Android, app dal sito), non dentro claude.ai.
+const dalVivo = () => { const d = disponibile(); return !d.inClaude && (d.gps || d.fascia); };
+
+// Una registrazione rimasta a metà (app chiusa o telefono spento): riprenderla, salvarla o scartarla.
+function bandaInterrotta() {
+  const b = stato.interrotta;
+  if (!b || registrazioneInCorso()) return null;
+  const quando = new Date(b.rec.inizio).toLocaleString("it-IT", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  const chiudi = () => { stato.interrotta = null; programmaRender(); };
+  return el("section", { class: "banda", style: "display:grid;gap:8px" },
+    el("span", {}, `Registrazione di ${nomeTipo(b.rec.tipo, b.rec.sottotipo).toLowerCase()} interrotta (${quando}).`),
+    el("div", { class: "azioni" },
+      el("button", { type: "button", class: "btn piccolo primario", onclick: () => { chiudi(); riprendiInterrotta(b, "riprendi"); } }, "Riprendi"),
+      el("button", { type: "button", class: "btn piccolo", onclick: () => { chiudi(); riprendiInterrotta(b, "salva"); } }, "Salva"),
+      conConferma(el("button", { type: "button", class: "btn piccolo pericolo" }, "Scarta"), "Tocca di nuovo", async () => { await scartaInterrotta(); chiudi(); })));
+}
+
+// App Android: se sul sito c'è una versione più nuova, lo dice con il collegamento per scaricarla.
+function bandaAggiornamento() {
+  const a = stato.aggiornamento;
+  return a ? el("p", { class: "banda info" }, `Nuova versione dell'app (${a.versione}). `, el("a", { href: a.pagina, target: "_blank", rel: "noopener" }, "Scaricala")) : null;
+}
+
 function azioniRapide() {
   const b = (testo, f) => el("button", { type: "button", class: "btn", onclick: f }, testo);
   return el("div", { class: "azioni-rapide", role: "group", "aria-label": "Registra" },
+    dalVivo() ? el("button", { type: "button", class: "btn primario", onclick: () => vai("dal-vivo", {}) }, "Dal vivo") : null,
     stato.profilo.attivita.includes("Forza") ? b("+ Forza", () => vai("registra", { tipo: "forza", data: oggi() })) : null,
     b("Importa file", () => vai("registra", { tipo: "file", data: oggi() })),
     b("+ A mano", () => vai("registra", { tipo: "file", data: oggi(), aMano: true })),
@@ -209,6 +239,18 @@ new ResizeObserver(([e]) => {
 }).observe($("vista"));
 // A mezzanotte "oggi" cambia: ridisegno quando la pagina torna visibile.
 document.addEventListener("visibilitychange", () => { if (!document.hidden) programmaRender(); });
+
+// Registrazione dal vivo rimasta a metà dall'ultima volta.
+leggiBozza().then((b) => { if (b?.rec?.inizio) { stato.interrotta = b; programmaRender(); } });
+
+// App Android: confronto la versione installata (versione.json nell'app) con quella pubblicata sul sito.
+if (nativo()) (async () => {
+  try {
+    const qui = await (await fetch("versione.json")).json();
+    const sito = await (await fetch("https://simo646.github.io/allenamento/android/versione.json", { cache: "no-store" })).json();
+    if (sito.codice > qui.codice) { stato.aggiornamento = sito; programmaRender(); }
+  } catch { /* senza rete si controlla la prossima volta */ }
+})();
 
 vai("oggi");
 avvia();

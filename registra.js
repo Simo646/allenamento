@@ -5,6 +5,8 @@ import { riassumiFit, riassumiXml, idSessione, CAMPI_FILE, CAMPI_DETTAGLIO, TIPI
 import { $, el, metti, icona, ICONE, oggi, fmtData, fmtGiorno, fmtNum, fmtKg, fmtSec, fmtDur, numero, avviso, esito, ricorda, conConferma } from "./util.js";
 import { metriche, barraZone } from "./dettaglio.js";
 import { contenutoScheda, riassuntoScheda } from "./schede.js";
+import { Registratore } from "./registratore.js";
+import { disponibile, collegaFascia } from "./sorgenti.js";
 
 const FIT_SDK = "https://cdn.jsdelivr.net/npm/@garmin/fitsdk@21.218.0/+esm";
 const occupato = (id) => stato.sessioni.some((s) => s.id === id);
@@ -20,6 +22,9 @@ registraVista("registra", { vivo: false, render(main, param) {
 
 /* ---------- Forza ---------- */
 let timer = 0;
+// Fascia collegata durante la forza: resta collegata anche se la pagina si ridisegna o si cambia vista.
+let fasciaForza = null; // { rec: Registratore, fascia, stato }
+async function staccaFasciaForza() { const f = fasciaForza; fasciaForza = null; await f?.fascia?.scollega?.(); }
 
 function moduloForza(main, param) {
   clearInterval(timer);
@@ -46,6 +51,28 @@ function moduloForza(main, param) {
   const sel = el("select", { id: "fz-scheda", onchange: (e) => { b.scheda = e.target.value || null; b.esercizi = dallaScheda(b.scheda, b.data); ridisegna(); } },
     el("option", { value: "" }, "Senza scheda"), schedeForza.map(([id, s]) => el("option", { value: id, selected: id === b.scheda }, s.titolo)));
 
+  // Battito dalla fascia durante le serie: a fine sessione diventano curva, zone e battito medio.
+  const battitoVivo = el("b", { class: "num" }, "");
+  const esitoFascia = el("span", { class: "esito", role: "status" });
+  const collega = el("button", { type: "button", class: "btn piccolo" }, "Collega la fascia");
+  collega.onclick = async () => {
+    collega.disabled = true;
+    esito(esitoFascia, "Cerco la fascia…");
+    try {
+      const rec = new Registratore({ tipo: "Forza", conGps: false });
+      rec.avvia(Date.now());
+      const f = { rec, fascia: null, stato: "connessa" };
+      f.fascia = await collegaFascia((m) => rec.battito(m), (s) => (f.stato = s));
+      fasciaForza = f;
+      b.inizioMs ??= Date.now();
+      ridisegna();
+    } catch (e) { esito(esitoFascia, e?.name === "NotFoundError" ? "Nessuna fascia scelta." : "Non collegata: " + (e?.message ?? "errore"), "err"); collega.disabled = false; }
+  };
+  const boxFascia = esistente || !disponibile().fascia ? null : fasciaForza
+    ? el("div", { class: "fascia-riga" }, el("span", {}, el("small", {}, fasciaForza.fascia?.nome ?? "Fascia"), battitoVivo),
+      el("button", { type: "button", class: "lnk", onclick: async () => { await staccaFasciaForza(); ridisegna(); } }, "Scollega"))
+    : el("div", { class: "fascia-riga" }, collega, esitoFascia);
+
   const tempo = el("b", { class: "num" }, "—");
   const contaSerie = el("b", { class: "num" }, "—");
   const volumeTile = el("b", { class: "num" }, "—");
@@ -64,6 +91,10 @@ function moduloForza(main, param) {
     riass.children[1].textContent = resta > 0 ? fmtSec(resta) : `Volume ${fmtNum(vol)} kg`;
     riass.children[1].className = resta > 0 ? "recupero" : "";
     tempo.textContent = b.inizioMs ? fmtSec((Date.now() - b.inizioMs) / 1000) : b.durata ? `${b.durata} min` : "—";
+    if (fasciaForza && battitoVivo.isConnected) {
+      const fc = fasciaForza.rec.fcAttuale(Date.now()), z = fasciaForza.rec.zonaAttuale(Date.now(), limiti());
+      battitoVivo.textContent = fasciaForza.stato === "persa" ? "segnale perso, riprovo…" : fc ? `${fc} bpm · Z${z}` : "in attesa del battito…";
+    }
     b.esercizi.forEach((e, i) => { const p = $(`fz-delta-${i}`); if (p) { const [t, c] = delta(e, b); p.textContent = t; p.className = "delta " + c; p.hidden = !t; } });
   }
 
@@ -120,16 +151,21 @@ function moduloForza(main, param) {
     salva.disabled = true;
     try {
       const durata = b.durata ?? (b.inizioMs ? Math.max(1, Math.round((Date.now() - b.inizioMs) / 60000)) : null);
-      const base = { tipo: "Forza", data: b.data, scheda: b.scheda, esercizi: lista, durata_min: durata, fc_media: b.fc_media, fc_max: b.fc_max, nota: (b.nota ?? "").trim() };
+      // Con la fascia collegata: battito medio e massimo, zone e curva misurati invece di quelli scritti a mano.
+      const misure = !esistente && fasciaForza?.rec.punti.length > 30 ? fasciaForza.rec.riassunto(limiti(), Date.now()) : null;
+      const battito = misure ? { fc_media: misure.fc_media, fc_max: misure.fc_max, z1_min: misure.z1_min, z2_min: misure.z2_min, z3_min: misure.z3_min, z4_min: misure.z4_min, z5_min: misure.z5_min, rmssd_ms: misure.rmssd_ms } : {};
+      const base = { tipo: "Forza", data: b.data, scheda: b.scheda, esercizi: lista, durata_min: durata, fc_media: b.fc_media, fc_max: b.fc_max, nota: (b.nota ?? "").trim(), ...battito };
       // Se quel giorno c'è già una forza importata da file senza esercizi, le serie vanno lì (battito e zone restano).
-      const daFile = !esistente && stato.sessioni.find((s) => s.data === b.data && s.tipo === "Forza" && !s.esercizi?.length);
+      const daFile = !esistente && !misure && stato.sessioni.find((s) => s.data === b.data && s.tipo === "Forza" && !s.esercizi?.length);
       const doc = esistente ?? daFile;
+      const id = doc?.id ?? idSessione(b.data, "Forza", occupato);
       if (doc) {
-        await stato.archivio.scrivi("sessioni", doc.id, { ...doc, ...base, durata_min: doc.durata_min ?? base.durata_min, fc_media: base.fc_media ?? doc.fc_media ?? null, fc_max: base.fc_max ?? doc.fc_max ?? null, nome: doc.nome || scheda?.titolo || "Forza" });
+        await stato.archivio.scrivi("sessioni", id, { ...doc, ...base, durata_min: doc.durata_min ?? base.durata_min, fc_media: base.fc_media ?? doc.fc_media ?? null, fc_max: base.fc_max ?? doc.fc_max ?? null, nome: doc.nome || scheda?.titolo || "Forza" });
       } else {
-        const id = idSessione(b.data, "Forza", occupato);
-        await stato.archivio.scrivi("sessioni", id, { ...base, nome: scheda?.titolo || "Forza", fonte: "Inserita nell'app" });
+        await stato.archivio.scrivi("sessioni", id, { ...base, nome: scheda?.titolo || "Forza", fonte: misure ? "Inserita nell'app, battito dalla fascia" : "Inserita nell'app" });
       }
+      if (misure) await stato.archivio.scrivi("dettagli", id, { curva_fc: misure.curva_fc, curve: null, traccia: null });
+      await staccaFasciaForza();
       ricorda.scrivi("bozza-forza", null);
       clearInterval(timer);
       avviso(esistente ? "Sessione aggiornata" : "Sessione di forza salvata");
@@ -138,6 +174,7 @@ function moduloForza(main, param) {
   };
   const annulla = !esistente && ricorda.leggi("bozza-forza") ? conConferma(el("button", { type: "button", class: "lnk" }, "Ricomincia da capo"), "Tocca di nuovo: perdi le serie segnate", async () => {
     ricorda.scrivi("bozza-forza", null);
+    await staccaFasciaForza();
     vai("registra", { tipo: "forza", data: b.data, scheda: b.scheda });
   }) : null;
 
@@ -149,6 +186,7 @@ function moduloForza(main, param) {
         el("div", { class: "tile" }, el("small", {}, "Tempo"), tempo),
         el("div", { class: "tile" }, el("small", {}, "Serie fatte"), contaSerie),
         el("div", { class: "tile" }, el("small", {}, "Volume"), volumeTile)),
+      boxFascia,
       scheda?.nota ? el("p", { class: "nota-scheda" }, scheda.nota) : null,
       el("p", { class: "sotto" }, "Spunta le serie mentre le fai: parte il recupero. Se non spunti niente, salvo tutte le serie compilate."),
       annulla),
@@ -212,6 +250,24 @@ function moduloFile(main, param) {
     scelta,
     aMano ? formManuale(param) : formFile(param));
 }
+// Salva un allenamento riassunto da un file o da una registrazione dal vivo: documento leggero in sessioni, traccia e
+// curve in dettagli. Un allenamento con lo stesso inizio, o inserito a mano quel giorno, viene aggiornato.
+export async function salvaRiassunto(r, param = {}, presi = new Set()) {
+  const stessa = (r.inizio && stato.sessioni.find((s) => s.inizio && s.inizio === r.inizio))
+    ?? stato.sessioni.find((s) => s.data === r.data && s.tipo === r.tipo && !s.inizio && !s.file);
+  const id = stessa?.id ?? idSessione(r.data, r.tipo, (x) => presi.has(x) || occupato(x));
+  presi.add(id);
+  const campi = Object.fromEntries(CAMPI_FILE.map((c) => [c, r[c] ?? null]));
+  const idScheda = schedaPer(param, r.tipo, r.data);
+  const schedaVoce = idScheda ? stato.schede[idScheda] : null;
+  const doc = stessa
+    ? { ...stessa, ...campi, tipo: r.tipo, sottotipo: r.sottotipo ?? stessa.sottotipo ?? null, ...(param.nota ? { nota: param.nota } : {}) }
+    : { data: r.data, tipo: r.tipo, sottotipo: r.sottotipo ?? null, nome: schedaVoce?.titolo ?? r.nome_file ?? "", nota: param.nota ?? "", scheda: idScheda, ...campi };
+  await stato.archivio.scrivi("sessioni", id, doc);
+  await stato.archivio.scrivi("dettagli", id, Object.fromEntries(CAMPI_DETTAGLIO.map((c) => [c, r[c] ?? null])));
+  return id;
+}
+
 // La scheda da collegare all'allenamento: quella da cui sei partito, se è dello stesso tipo, altrimenti quella del giorno.
 const schedaPer = (param, tipo, data) => (param.voce?.scheda && param.voce.tipo === tipo ? param.voce.scheda : vociDelGiorno(stato.settimana, data).find((v) => v.tipo === tipo)?.scheda ?? null);
 
@@ -277,21 +333,7 @@ function formFile(param) {
     const presi = new Set();
     let fatti = 0;
     try {
-      for (const { r } of attesa) {
-        const stessa = stato.sessioni.find((s) => s.inizio && s.inizio === r.inizio)
-          ?? stato.sessioni.find((s) => s.data === r.data && s.tipo === r.tipo && !s.inizio && !s.file); // inserita a mano quel giorno
-        const id = stessa?.id ?? idSessione(r.data, r.tipo, (x) => presi.has(x) || occupato(x));
-        presi.add(id);
-        const campi = Object.fromEntries(CAMPI_FILE.map((c) => [c, r[c] ?? null]));
-        const idScheda = schedaPer(param, r.tipo, r.data);
-        const schedaVoce = idScheda ? stato.schede[idScheda] : null;
-        const doc = stessa
-          ? { ...stessa, ...campi, tipo: r.tipo, sottotipo: r.sottotipo ?? stessa.sottotipo ?? null }
-          : { data: r.data, tipo: r.tipo, sottotipo: r.sottotipo ?? null, nome: schedaVoce?.titolo ?? r.nome_file ?? "", nota: "", scheda: idScheda, ...campi };
-        await stato.archivio.scrivi("sessioni", id, doc);
-        await stato.archivio.scrivi("dettagli", id, Object.fromEntries(CAMPI_DETTAGLIO.map((c) => [c, r[c] ?? null])));
-        fatti++;
-      }
+      for (const { r } of attesa) { await salvaRiassunto(r, param, presi); fatti++; }
       avviso(fatti === 1 ? "Allenamento salvato" : `${fatti} allenamenti salvati`);
       vai("oggi");
     } catch (e) {

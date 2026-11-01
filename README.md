@@ -11,6 +11,7 @@ Programma la settimana, registra forza serie per serie e uscite dai file del dis
 
 Dopo il primo avvio l'app funziona anche senza rete.
 
+
 ## Dove stanno i dati
 
 Solo sul tuo telefono, nella memoria dell'app. Non vengono inviati da nessuna parte: questo sito contiene solo il programma.
@@ -22,6 +23,7 @@ Su un telefono nuovo, al primo avvio scegli **Importa un backup**.
 - Settimana tipo da lunedì a domenica, con le schede che vuoi: forza (esercizi, serie, chili, ripetizioni), HIIT, corsa, camminata, trekking, bici da strada, gravel o MTB.
 - Schede da leggere al volo come un foglio da palestra, da duplicare e da avviare con un tocco; le serie uguali si scrivono in una riga.
 - Forza serie per serie, con i carichi dell'ultima volta, il recupero che parte da solo e le note dell'esercizio sotto gli occhi.
+- Registrazione dal vivo con il GPS del telefono e la fascia cardio Bluetooth: corsa, camminata, trekking, bici, HIIT e battito durante la forza. Dal browser funziona a schermo acceso (su iPhone solo il GPS, senza fascia); l'app Android registra anche a schermo spento.
 - Import dei file FIT, GPX e TCX di orologi, ciclocomputer e app (Garmin, Wahoo, Coros, Polar, Suunto, Strava…): traccia, battito, zone, quota, velocità, potenza e cadenza quando ci sono.
 - Zone di battito calcolate dall'età, con la formula di Karvonen o scritte a mano.
 - Grafici: minuti e zone per settimana, distanze, passo o velocità, massimale stimato per esercizio.

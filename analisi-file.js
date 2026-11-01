@@ -141,8 +141,26 @@ export function intervalliTimer(eventi = []) {
 }
 
 // Variabilità del battito (RMSSD) dagli intervalli R-R, se la fascia li ha registrati.
-function rmssd(hrv) {
-  const rr = (hrv ?? []).flatMap((m) => m.time ?? []).filter((x) => x > 0.25 && x < 2.5);
+const rmssd = (hrv) => rmssdDaRr((hrv ?? []).flatMap((m) => m.time ?? []));
+
+// Una misura della fascia cardio via Bluetooth (servizio standard Heart Rate, caratteristica 0x2A37): primo byte di
+// opzioni, battito a 8 o 16 bit, eventuale energia spesa, poi gli intervalli R-R in 1/1024 di secondo.
+export function leggiMisuraFc(dv) {
+  const opzioni = dv.getUint8(0);
+  const a16 = opzioni & 0x01;
+  let i = 1;
+  const fc = a16 ? dv.getUint16(i, true) : dv.getUint8(i);
+  i += a16 ? 2 : 1;
+  const contatto = opzioni & 0x04 ? !!(opzioni & 0x02) : null; // null: la fascia non lo dice
+  if (opzioni & 0x08) i += 2; // energia spesa, non serve
+  const rr = [];
+  if (opzioni & 0x10) for (; i + 1 < dv.byteLength; i += 2) rr.push(dv.getUint16(i, true) / 1024);
+  return { fc, rr, contatto };
+}
+
+// RMSSD in millisecondi da una lista di intervalli R-R in secondi.
+export function rmssdDaRr(lista = []) {
+  const rr = lista.filter((x) => x > 0.25 && x < 2.5);
   if (rr.length < 30) return null;
   let somma = 0, n = 0;
   for (let i = 1; i < rr.length; i++) {

@@ -3,6 +3,7 @@ import { stato, registraVista, vai, rivai, testata, salvaProfilo, salvaSettimana
 import { PROFILO_PREDEFINITO, MODELLI_SETTIMANA, settimanaDaModello, etaDa, creaBackup, validaBackup, COLLEZIONI, GIORNI } from "./dati.js";
 import { calcolaZone, fcMaxDaEta, zoneDaCurva, validaLimiti, TIPI } from "./analisi-file.js";
 import { el, metti, oggi, fmtNum, numero, avviso, esito, conConferma } from "./util.js";
+import { nativo, condividiFile } from "./sorgenti.js";
 
 const ANNO = new Date().getFullYear();
 const campo = (etichetta, input, aiuto) => el("label", { class: "campo" }, el("span", {}, etichetta), input, aiuto ? el("small", {}, aiuto) : null);
@@ -262,6 +263,12 @@ function cardDati() {
       const backup = creaBackup({ profilo: stato.profilo, settimana: stato.settimana, schede: Object.values(stato.schede), sessioni: stato.sessioni,
         dettagli, notti: stato.nottiMesi, peso: stato.pesoMesi });
       const testo = JSON.stringify(backup);
+      // App Android: il file va nel pannello Condividi (Drive, Dropbox, File…).
+      if (nativo()) {
+        try { await condividiFile(`allenamento-backup-${oggi()}.json`, testo); esito(esitoD, "Backup pronto: scegli dove salvarlo.", "ok"); }
+        catch (e) { esito(esitoD, /cancel/i.test(e?.message ?? "") ? "Backup annullato." : "Backup non riuscito: " + (e?.message ?? "errore"), /cancel/i.test(e?.message ?? "") ? "" : "err"); }
+        return;
+      }
       const dl = await window.claude?.use?.("downloads");
       if (dl) {
         try { await dl.save({ filename: `allenamento-backup-${oggi()}.json`, data: testo }); esito(esitoD, "Backup salvato.", "ok"); return; }

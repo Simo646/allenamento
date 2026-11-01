@@ -5,6 +5,7 @@ import { GIORNI, NOMI_GIORNI, durataHiit, durataForza, riassuntoSerie, ultimaVol
 import { TIPI } from "./analisi-file.js";
 import { el, metti, oggi, fmtGiorno, fmtData, ricorda } from "./util.js";
 import { apriDettaglio, metriche } from "./dettaglio.js";
+import { disponibile } from "./sorgenti.js";
 
 export const CARDIO = ["Corsa", "Camminata", "Trekking", "Bici"];
 const fmtRec = (s) => (s < 60 ? `${s}"` : `${String(s / 60).replace(".", ",")}'`);
@@ -45,7 +46,13 @@ export function iniziaScheda(id) {
   const s = stato.schede[id];
   if (!s) return;
   if (s.tipo === "Forza") vai("registra", { tipo: "forza", scheda: id, data: oggi() });
-  else vai("registra", { tipo: "file", data: oggi(), voce: { tipo: s.tipo, sottotipo: s.sottotipo ?? null, scheda: id } });
+  else {
+    const voce = { tipo: s.tipo, sottotipo: s.sottotipo ?? null, scheda: id };
+    const d = disponibile();
+    // Dove GPS o fascia funzionano si registra dal vivo; altrimenti con un file o a mano.
+    if (!d.inClaude && (d.gps || d.fascia)) vai("dal-vivo", { voce });
+    else vai("registra", { tipo: "file", data: oggi(), voce });
+  }
 }
 
 /* ---------- elenco ---------- */

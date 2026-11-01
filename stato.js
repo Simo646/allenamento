@@ -56,7 +56,7 @@ export const salvaSettimana = (s) => stato.archivio.scrivi("config", "settimana"
 // Ogni vista: {render(main, param), vivo}. Le viste "vive" si ridisegnano quando cambiano i dati;
 // i moduli (vivo: false) no, per non cancellare quello che stai scrivendo.
 const viste = {};
-const SCHEDA_DI = { oggi: "oggi", registra: "oggi", settimana: "settimana", schede: "settimana", "scheda-vista": "settimana", scheda: "settimana", voce: "settimana", allenamenti: "allenamenti", analisi: "analisi" };
+const SCHEDA_DI = { oggi: "oggi", registra: "oggi", "dal-vivo": "oggi", settimana: "settimana", schede: "settimana", "scheda-vista": "settimana", scheda: "settimana", voce: "settimana", allenamenti: "allenamenti", analisi: "analisi" };
 export function registraVista(nome, def) { viste[nome] = def; }
 
 export function vai(nome, param = {}) {
