@@ -66,7 +66,8 @@ export function vai(nome, param = {}) {
   document.body.classList.remove("con-barra");
   $("barra-fondo").hidden = true;
   $("barra-fondo").replaceChildren();
-  for (const b of document.querySelectorAll(".schede-nav [data-vai]")) b.setAttribute("aria-current", b.dataset.vai === SCHEDA_DI[nome] ? "page" : "false");
+  // `sezione`: la scheda in basso da evidenziare quando non è quella solita della vista (es. a mano da Allenamenti).
+  for (const b of document.querySelectorAll(".schede-nav [data-vai]")) b.setAttribute("aria-current", b.dataset.vai === (param.sezione ?? SCHEDA_DI[nome]) ? "page" : "false");
   window.scrollTo({ top: 0 });
   disegna();
 }

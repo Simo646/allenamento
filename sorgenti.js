@@ -131,8 +131,16 @@ function fasciaFinta(onMisura, onStato) {
 
 /* ---------- schermo e notifiche ---------- */
 // Nel browser lo schermo resta acceso durante la registrazione (si riprende il blocco quando la pagina torna visibile).
-export async function schermoAcceso() {
-  if (nativo() || !navigator.wakeLock) return () => {};
+// Nell'app Android il cardio va anche a schermo spento; con `sempre` (timer HIIT, recupero della forza) lo schermo resta
+// acceso anche lì, perché a schermo spento Android può fermare timer e segnali.
+export async function schermoAcceso(sempre = false) {
+  if (nativo()) {
+    if (!sempre) return () => {};
+    const k = plugin("KeepAwake");
+    try { await k.keepAwake(); } catch { return () => {}; }
+    return () => { k.allowSleep().catch(() => {}); };
+  }
+  if (!navigator.wakeLock) return () => {};
   let blocco = null, attivo = true;
   const prendi = async () => { try { blocco = await navigator.wakeLock.request("screen"); } catch { /* il browser può rifiutare */ } };
   const visibile = () => { if (attivo && document.visibilityState === "visible") prendi(); };

@@ -133,7 +133,8 @@ main{display:grid;gap:14px;align-content:start;padding-bottom:14px}
 
 /* Voci in programma */
 .voci{display:grid;gap:12px}
-.voce-oggi{display:grid;gap:8px}
+.voce-oggi{display:grid;gap:8px;min-width:0}
+.voce-dettaglio .lnk{white-space:normal;text-align:left}
 .voce-riga{display:flex;align-items:center;gap:12px}
 .icona-tipo{width:40px;height:40px;flex:none;border-radius:6px;display:grid;place-items:center;border:2px solid var(--c);color:var(--c)}
 .icona-tipo svg{width:20px;height:20px}
@@ -218,6 +219,23 @@ main{display:grid;gap:14px;align-content:start;padding-bottom:14px}
 .campi-vivo>.campo-vivo:last-child:nth-child(even){grid-column:1 / -1}
 .fascione-pausa{background:var(--ink);color:var(--bg);text-align:center;padding:10px;border-radius:var(--r-s);font-family:var(--font-ui);font-weight:700;font-size:22px;letter-spacing:.12em;text-transform:uppercase}
 .comandi-vivo{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.comandi-vivo.tre{grid-template-columns:repeat(3,minmax(0,1fr))}
+.azioni-rapide .largo{grid-column:1 / -1}
+.tiles.quattro{grid-template-columns:repeat(4,minmax(0,1fr))}
+.tiles.quattro .tile b{font-size:24px}
+
+/* Timer HIIT: fase in alto nel suo colore, conto alla rovescia enorme, esercizio in corso (o in arrivo) e il successivo */
+.hiit{display:grid;gap:6px;justify-items:center;text-align:center;border:var(--tratto);border-radius:var(--r);overflow:hidden;padding-bottom:16px}
+.hiit-fase{justify-self:stretch;padding:8px;font-family:var(--font-ui);font-weight:700;font-size:24px;letter-spacing:.16em;text-transform:uppercase;background:var(--ink);color:var(--bg)}
+.hiit[data-fase=lavoro] .hiit-fase{background:var(--z5);color:var(--z5-ink)}
+.hiit[data-fase=pausa] .hiit-fase{background:var(--z2);color:var(--z2-ink)}
+.hiit[data-fase=recupero] .hiit-fase{background:var(--z3);color:var(--z3-ink)}
+.hiit[data-fase=ferma] .hiit-fase{background:var(--faint);color:var(--bg)}
+.hiit-conto{font-family:var(--font-ui);font-size:clamp(96px,34vw,176px);font-weight:700;line-height:.95;font-variant-numeric:tabular-nums}
+.hiit-esercizio{display:grid;gap:2px;padding:0 14px}
+.hiit-esercizio small{font-family:var(--font-ui);font-weight:600;font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.hiit-nome{font-family:var(--font-ui);font-size:clamp(30px,10vw,46px);font-weight:700;line-height:1.05;text-transform:uppercase}
+.hiit-poi{margin:0;padding:0 14px;font-family:var(--font-ui);font-weight:600;font-size:18px;letter-spacing:.04em;color:var(--muted)}
 
 /* Vista di lettura di una scheda, come un foglio da palestra */
 .azioni-scheda{display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px}

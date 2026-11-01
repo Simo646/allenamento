@@ -1,11 +1,10 @@
 // Piano › Schede: l'elenco delle schede e la vista di lettura di una scheda, compatta come un foglio da palestra,
-// con Inizia (registra subito), Modifica e Duplica. L'editor sta in settimana.js.
+// con Registra, Modifica e Duplica. L'editor sta in settimana.js.
 import { stato, registraVista, vai, testata, iconaTipo, nomeTipo, attive, chipZona, intervalloZona } from "./stato.js";
 import { GIORNI, NOMI_GIORNI, CARDIO, durataHiit, durataForza, riassuntoSerie, ultimaVolta, giornoDi } from "./dati.js";
 import { TIPI } from "./analisi-file.js";
 import { el, metti, oggi, fmtGiorno, fmtData, ricorda } from "./util.js";
 import { apriDettaglio, metriche } from "./dettaglio.js";
-import { disponibile } from "./sorgenti.js";
 
 const fmtRec = (s) => (s < 60 ? `${s}"` : `${String(s / 60).replace(".", ",")}'`);
 
@@ -26,7 +25,7 @@ export function riassuntoScheda(s) {
 // tempi ed esercizi per l'HIIT.
 export function contenutoScheda(s) {
   if (s.tipo === "Forza") return el("ul", { class: "lista-scheda" }, (s.esercizi ?? []).map((e) =>
-    el("li", {}, el("b", {}, e.nome), el("span", { class: "num" }, riassuntoSerie(e.serie)))));
+    el("li", {}, el("b", {}, e.nome), el("span", { class: "num" }, riassuntoSerie(e.serie, e.unita)))));
   if (s.tipo === "HIIT") return el("div", { style: "display:grid;gap:6px" },
     el("span", { class: "num" }, `${s.lavoro_s}" lavoro · ${s.pausa_s}" pausa · ${s.giri} giri · ${s.recupero_giri_s}" tra i giri · circa ${durataHiit(s)} min`),
     el("ul", { class: "lista-scheda" }, (s.esercizi ?? []).map((e, i) => el("li", {}, el("b", {}, `${i + 1}. ${e.nome}`)))));
@@ -40,19 +39,8 @@ const elencoGiorni = (giorni) => {
   return n.length > 1 ? `${n.slice(0, -1).join(", ")} e ${n[n.length - 1]}` : n[0];
 };
 
-// Da una scheda si registra subito: forza serie per serie, gli altri tipi con un file o a mano.
-export function iniziaScheda(id) {
-  const s = stato.schede[id];
-  if (!s) return;
-  if (s.tipo === "Forza") vai("registra", { tipo: "forza", scheda: id, data: oggi() });
-  else {
-    const voce = { tipo: s.tipo, sottotipo: s.sottotipo ?? null, scheda: id };
-    const d = disponibile();
-    // Dove GPS o fascia funzionano si registra dal vivo; altrimenti con un file o a mano.
-    if (!d.inClaude && (d.gps || d.fascia)) vai("dal-vivo", { voce });
-    else vai("registra", { tipo: "file", data: oggi(), voce });
-  }
-}
+// Da una scheda si va a Registra sessione con attività e scheda già scelte: si parte quando si è pronti.
+export function iniziaScheda(id) { if (stato.schede[id]) vai("dal-vivo", { scheda: id }); }
 
 /* ---------- elenco ---------- */
 registraVista("schede", { vivo: true, render(main) {
@@ -111,13 +99,13 @@ registraVista("scheda-vista", { vivo: true, render(main, { id }) {
         return el("li", {},
           el("span", { class: "n" }, String(i + 1)),
           el("b", {}, e.nome),
-          el("span", { class: "serie num" }, riassuntoSerie(e.serie) || "—", e.recupero_s ? el("em", {}, "rec. " + fmtRec(e.recupero_s)) : null),
+          el("span", { class: "serie num" }, riassuntoSerie(e.serie, e.unita) || "—", e.recupero_s ? el("em", {}, "rec. " + fmtRec(e.recupero_s)) : null),
           e.nota ? el("small", {}, e.nota) : null,
-          u ? el("small", { class: "num" }, `Ultima volta ${fmtData(u.data, { day: "numeric", month: "short" })}: ${riassuntoSerie(u.serie)}`) : null);
+          u ? el("small", { class: "num" }, `Ultima volta ${fmtData(u.data, { day: "numeric", month: "short" })}: ${riassuntoSerie(u.serie, u.unita)}`) : null);
       })));
   } else if (hiit) {
     contenuto = el("section", { class: "card" }, el("h2", {}, "Esercizi del giro"),
-      el("p", { class: "sotto num" }, `${s.lavoro_s}" di lavoro e ${s.pausa_s}" di pausa per esercizio, ${s.giri} giri, ${s.recupero_giri_s}" di recupero tra un giro e l'altro.`),
+      el("p", { class: "sotto num" }, `${s.lavoro_s}" per esercizio e ${s.pausa_s}" di pausa tra uno e l'altro, ${s.giri} giri, ${s.recupero_giri_s}" di pausa tra un giro e l'altro.`),
       el("ol", { class: "foglio-scheda" }, (s.esercizi ?? []).map((e, i) => el("li", {}, el("span", { class: "n" }, String(i + 1)), el("b", {}, e.nome)))));
   } else {
     contenuto = el("section", { class: "card" }, el("h2", {}, "Obiettivo"),
@@ -129,7 +117,7 @@ registraVista("scheda-vista", { vivo: true, render(main, { id }) {
   metti(main,
     testata({ titolo: s.titolo || nomeTipo(s.tipo), sopra: forza || hiit ? s.tipo : "Cardio · " + nomeTipo(s.tipo, s.sottotipo), indietro: torna }),
     el("div", { class: "azioni-scheda" },
-      el("button", { type: "button", class: "btn primario", onclick: () => iniziaScheda(id) }, forza ? "Inizia" : hiit ? "Registra" : "Registra"),
+      el("button", { type: "button", class: "btn primario", onclick: () => iniziaScheda(id) }, "Registra"),
       el("button", { type: "button", class: "btn", onclick: () => vai("scheda", { id }) }, "Modifica"),
       el("button", { type: "button", class: "btn", onclick: duplica }, "Duplica")),
     programma,

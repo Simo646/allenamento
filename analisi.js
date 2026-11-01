@@ -1,12 +1,21 @@
 // Analisi: volume e zone per settimana, distanze, andamento per attività, forza per esercizio, sonno, ossigeno, peso.
 import { stato, registraVista, rivai, testata, coloreTipo, modulo, limiti, intervalloZona, ZONE } from "./stato.js";
-import { recupero, CARDIO } from "./dati.js";
+import { recupero, CARDIO, testoSerie } from "./dati.js";
 import { TIPI, volume, massimale } from "./analisi-file.js";
 import { el, metti, oggi, piuGiorni, lunediDi, fmtData, fmtGiorno, fmtNum, fmtDur, fmtKg, fmtSec, somma } from "./util.js";
 import { COLORE_ZONA, graficoColonne, graficoLinea, graficoIntervalli, vuoto } from "./grafici.js";
 import { zoneDi, haZone, conPasso, volumeSessione } from "./dettaglio.js";
 
 const scelte = { settimane: 8, andamento: null, esercizio: null };
+
+// Promemoria: che cosa allena ogni zona (con i limiti al 60, 70, 80 e 90% usati dall'app).
+const A_COSA_SERVONO = [
+  ["Recupero", "Riscaldamento, defaticamento e recupero attivo."],
+  ["Fondo", "Resistenza di base e consumo dei grassi: si regge a lungo."],
+  ["Aerobica", "Migliora la capacità aerobica e l'efficienza di cuore e polmoni."],
+  ["Soglia", "Alza la soglia: tieni più a lungo ritmi veloci."],
+  ["Massimo", "Potenza e VO₂max: scatti e ripetute brevi, con recuperi lunghi."],
+];
 
 registraVista("analisi", { vivo: true, render(main) {
   const d = oggi();
@@ -46,6 +55,14 @@ registraVista("analisi", { vivo: true, render(main) {
     valore: (w, s) => (s.i < 0 ? somma(perSett(w).filter((x) => !haZone(x)), (x) => x.durata_min) : somma(perSett(w).filter(haZone), (x) => zoneDi(x)[s.i])),
     etichettaX: etichetta, formato: fmtMin, titoloTip: titoloSett,
   }) : vuoto(gZone, "Nessun allenamento nel periodo."));
+
+  sezioni.push(el("section", { class: "card" }, el("h2", {}, "A cosa servono le zone"),
+    el("div", { class: "tabella" }, el("table", {},
+      el("thead", {}, el("tr", {}, el("th", {}, "Zona"), el("th", {}, "bpm"), el("th", {}, "Allena"))),
+      el("tbody", {}, A_COSA_SERVONO.map(([nome, testo], i) => el("tr", {},
+        el("td", {}, el("span", { style: "display:inline-flex;align-items:center;gap:6px;white-space:nowrap" }, el("i", { class: "dot", style: `background:${COLORE_ZONA[i]}` }), `${ZONE[i]} ${nome}`)),
+        el("td", { class: "num", style: "white-space:nowrap" }, intervalloZona(i, lim)),
+        el("td", { style: "white-space:normal;min-width:140px" }, testo))))))));
 
   // Distanza
   const conKm = tipi.filter((t) => sess.some((s) => s.tipo === t && s.km > 0));
@@ -97,11 +114,12 @@ registraVista("analisi", { vivo: true, render(main) {
       el("thead", {}, el("tr", {}, el("th", {}, "Giorno"), el("th", {}, "Serie"), el("th", {}, "Volume"), el("th", {}, "Massimale"))),
       el("tbody", {}, [...storia].reverse().slice(0, 6).map(({ s, e }) => el("tr", {},
         el("td", {}, fmtGiorno(s.data)),
-        el("td", {}, (e.serie ?? []).map((x) => (x.kg ? `${fmtKg(x.kg)}×${x.rip ?? "—"}` : `${x.rip ?? "—"}`)).join(" · ")),
+        el("td", {}, (e.serie ?? []).map((x) => testoSerie(x, e.unita)).join(" · ")),
         el("td", {}, volume(e.serie) ? `${fmtNum(volume(e.serie))} kg` : "—"),
         el("td", {}, massimale(e.serie) ? `${fmtKg(massimale(e.serie))} kg` : "—"))))));
     const conKg = storia.filter(({ e }) => massimale(e.serie));
-    const [c, g] = card("Forza per esercizio", conKg.length ? "Massimale stimato (Epley) dalla serie migliore di ogni sessione." : "Esercizio a corpo libero: conta le ripetizioni nella tabella.", sel);
+    const aTempo = storia.some(({ e }) => e.unita === "sec");
+    const [c, g] = card("Forza per esercizio", conKg.length ? "Massimale stimato (Epley) dalla serie migliore di ogni sessione." : aTempo ? "Esercizio a tempo: i secondi di ogni serie sono nella tabella." : "Esercizio a corpo libero: conta le ripetizioni nella tabella.", sel);
     c.append(tabella);
     sezioni.push(c);
     disegni.push(() => conKg.length ? graficoLinea(g, {

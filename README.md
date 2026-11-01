@@ -1,6 +1,6 @@
 # Allenamento su misura
 
-Programma la settimana, registra forza serie per serie e uscite dai file del dispositivo, e segui i progressi sulle tue zone di battito.
+Programma la settimana, registra le sessioni (forza serie per serie, timer HIIT, uscite col GPS o dai file del dispositivo) e segui i progressi sulle tue zone di battito.
 
 ## Come si installa sul telefono
 
@@ -30,10 +30,10 @@ Su un telefono nuovo, al primo avvio scegli **Importa un backup**.
 
 - Settimana tipo da lunedì a domenica, con le schede che vuoi: forza (esercizi, serie, chili, ripetizioni), HIIT, corsa, camminata, trekking, bici da strada, gravel o MTB.
 - Schede da leggere al volo come un foglio da palestra, da duplicare e da avviare con un tocco; le serie uguali si scrivono in una riga.
-- Forza serie per serie, con i carichi dell'ultima volta, il recupero che parte da solo e le note dell'esercizio sotto gli occhi.
-- Registrazione dal vivo con il GPS del telefono e la fascia cardio Bluetooth: corsa, camminata, trekking, bici, HIIT e battito durante la forza. Dal browser funziona a schermo acceso (su iPhone solo il GPS, senza fascia); l'app Android registra anche a schermo spento.
+- Forza serie per serie, con i carichi dell'ultima volta, il recupero che parte da solo (con un bip a 3-2-1 quando finisce) e le note dell'esercizio sotto gli occhi; gli esercizi si contano in ripetizioni o in secondi.
+- Registra sessione: scegli l'attività e la scheda (l'app propone quella di oggi) e parti quando sei pronto. Corsa, camminata, trekking e bici col GPS del telefono; timer HIIT con l'esercizio in corso, il successivo e i bip a 3-2-1 prima di ogni inizio e fine; forza serie per serie. La fascia cardio Bluetooth è facoltativa. Dal browser funziona a schermo acceso (su iPhone solo il GPS, senza fascia); l'app Android registra il cardio anche a schermo spento.
 - Import dei file FIT, GPX e TCX di orologi, ciclocomputer e app (Garmin, Wahoo, Coros, Polar, Suunto, Strava…): traccia, battito, zone, quota, velocità, potenza e cadenza quando ci sono.
-- Zone di battito calcolate dall'età, con la formula di Karvonen o scritte a mano.
+- Zone di battito calcolate dall'età, con la formula di Karvonen o scritte a mano, e un promemoria di cosa allena ognuna.
 - Grafici: minuti e zone per settimana, distanze, passo o velocità, massimale stimato per esercizio.
 - Moduli facoltativi: sonno con avviso di recupero, ossigeno nel sonno, peso.
 

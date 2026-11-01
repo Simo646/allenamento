@@ -128,6 +128,7 @@ registraVista("scheda", { vivo: false, render(main, param) {
     const pulita = pulisci(bozza);
     if (!pulita.titolo) pulita.titolo = bozza.tipo === "Forza" || bozza.tipo === "HIIT" ? bozza.tipo : nomeTipo(pulita.tipo, pulita.sottotipo);
     if ((pulita.tipo === "Forza" || pulita.tipo === "HIIT") && !pulita.esercizi.length) return esito(esitoS, "Aggiungi almeno un esercizio.", "err");
+    if (pulita.tipo === "HIIT" && !(pulita.lavoro_s >= 5 && pulita.giri >= 1)) return esito(esitoS, "Servono almeno 5 secondi per esercizio e un giro.", "err");
     salvaBtn.disabled = true;
     try {
       const id = esistente?.id ?? `${pulita.tipo.toLowerCase()}-${idCasuale()}`;
@@ -174,12 +175,13 @@ const piccoloBtn = (etichetta, ic, f) => el("button", { type: "button", class: "
 
 
 // Esercizi di forza. Di solito le serie sono uguali: una riga "serie, ripetizioni, chili". Per piramidi o serie a
-// scalare si aprono le serie una per una ("Serie diverse"), e si torna indietro con "Tutte uguali".
+// scalare si aprono le serie una per una ("Serie diverse"), e si torna indietro con "Tutte uguali". Ogni esercizio si
+// conta in ripetizioni o in secondi (plank, tenute).
 function editorForza(b, ridisegna) {
   b.esercizi ??= [];
   const RECUPERI = [30, 45, 60, 90, 120, 150, 180, 240];
   const durata = el("p", { class: "sotto num" });
-  const aggiornaDurata = () => (durata.textContent = `Durata stimata: circa ${durataForza(b)} minuti, contando 40" per serie più il recupero.`);
+  const aggiornaDurata = () => (durata.textContent = `Durata stimata: circa ${durataForza(b)} minuti, contando 40" per serie (o i suoi secondi) più il recupero.`);
   aggiornaDurata();
   const schede = b.esercizi.map((e, i) => {
     e.serie ??= [{ kg: null, rip: 10 }];
@@ -188,30 +190,37 @@ function editorForza(b, ridisegna) {
     const rec = el("select", { id: `s-e${i}-rec`, onchange: (ev) => { e.recupero_s = numero(ev.target.value); aggiornaDurata(); } },
       el("option", { value: "" }, "—"), RECUPERI.map((s) => el("option", { value: s, selected: e.recupero_s === s }, s < 60 ? `${s} s` : `${s / 60} min`.replace(".5", ",5"))));
     const nota = el("input", { id: `s-e${i}-nota`, value: e.nota ?? "", placeholder: "Tecnica, varianti, attrezzo (facoltativa)", oninput: (ev) => (e.nota = ev.target.value) });
+    const aTempo = e.unita === "sec", q = aTempo ? "sec" : "rip", nomeQ = aTempo ? "Secondi" : "Ripetizioni";
+    const misura = el("div", { class: "seg", role: "radiogroup", "aria-label": "Misura" },
+      [["rip", "Ripetizioni"], ["sec", "Secondi"]].map(([u, t]) => opzione(`s-e${i}-unita`, u, t, q === u, () => {
+        e.unita = u === "sec" ? "sec" : undefined;
+        e.serie = e.serie.map((x) => (u === "sec" ? { kg: x.kg ?? null, sec: x.sec ?? 30 } : { kg: x.kg ?? null, rip: x.rip ?? 10 }));
+        ridisegna();
+      })));
 
     let serie;
     if (!e._diverse) {
-      const v = { n: e.serie.length, rip: e.serie[0]?.rip ?? null, kg: e.serie[0]?.kg ?? null };
-      const applica = () => { e.serie = Array.from({ length: Math.max(1, Math.min(v.n ?? 1, 20)) }, () => ({ kg: v.kg, rip: v.rip })); aggiornaDurata(); };
+      const v = { n: e.serie.length, q: e.serie[0]?.[q] ?? null, kg: e.serie[0]?.kg ?? null };
+      const applica = () => { e.serie = Array.from({ length: Math.max(1, Math.min(v.n ?? 1, 20)) }, () => ({ kg: v.kg, [q]: v.q })); aggiornaDurata(); };
       serie = [
         el("div", { class: "righe", style: "grid-template-columns:repeat(3,minmax(0,1fr))" },
           campo("Serie", el("input", { id: `s-e${i}-n`, class: "num", inputmode: "numeric", value: v.n, oninput: (ev) => { v.n = numero(ev.target.value) ?? 1; applica(); } })),
-          campo("Ripetizioni", el("input", { id: `s-e${i}-rip`, class: "num", inputmode: "numeric", value: v.rip ?? "", oninput: (ev) => { v.rip = numero(ev.target.value); applica(); } })),
+          campo(nomeQ, el("input", { id: `s-e${i}-${q}`, class: "num", inputmode: "numeric", value: v.q ?? "", oninput: (ev) => { v.q = numero(ev.target.value); applica(); } })),
           campo("Chili", el("input", { id: `s-e${i}-kg`, class: "num", inputmode: "decimal", value: testoKg(v.kg), placeholder: "corpo libero", oninput: (ev) => { v.kg = numero(ev.target.value); applica(); } }))),
         el("button", { type: "button", class: "lnk", style: "justify-self:start", onclick: () => { e._diverse = true; ridisegna(); } }, "Serie diverse tra loro"),
       ];
     } else {
       serie = [
         el("div", { class: "griglia-scheda" },
-          el("span", { class: "intest" }, "Serie"), el("span", { class: "intest" }, "kg"), el("span", { class: "intest" }, "Ripetizioni"), el("span"),
+          el("span", { class: "intest" }, "Serie"), el("span", { class: "intest" }, "kg"), el("span", { class: "intest" }, nomeQ), el("span"),
           e.serie.map((s, j) => [
             el("span", { class: "n" }, String(j + 1)),
             el("input", { id: `s-e${i}-s${j}-kg`, class: "input num", inputmode: "decimal", value: testoKg(s.kg), placeholder: "corpo libero", "aria-label": `${e.nome || "Esercizio"}, serie ${j + 1}, chili`, oninput: (ev) => (s.kg = numero(ev.target.value)) }),
-            el("input", { id: `s-e${i}-s${j}-rip`, class: "input num", inputmode: "numeric", value: s.rip ?? "", "aria-label": `${e.nome || "Esercizio"}, serie ${j + 1}, ripetizioni`, oninput: (ev) => (s.rip = numero(ev.target.value)) }),
+            el("input", { id: `s-e${i}-s${j}-${q}`, class: "input num", inputmode: "numeric", value: s[q] ?? "", "aria-label": `${e.nome || "Esercizio"}, serie ${j + 1}, ${nomeQ.toLowerCase()}`, oninput: (ev) => { s[q] = numero(ev.target.value); aggiornaDurata(); } }),
             e.serie.length > 1 ? piccoloBtn(`Togli la serie ${j + 1}`, ICONE.chiudi, () => { e.serie.splice(j, 1); ridisegna(); }) : el("span"),
           ])),
         el("div", { class: "azioni" },
-          el("button", { type: "button", class: "btn tratteggio piccolo", onclick: () => { const u = e.serie[e.serie.length - 1]; e.serie.push({ kg: u?.kg ?? null, rip: u?.rip ?? 10 }); ridisegna(); } }, "+ Serie"),
+          el("button", { type: "button", class: "btn tratteggio piccolo", onclick: () => { const u = e.serie[e.serie.length - 1]; e.serie.push({ kg: u?.kg ?? null, [q]: u?.[q] ?? (aTempo ? 30 : 10) }); ridisegna(); } }, "+ Serie"),
           el("button", { type: "button", class: "lnk", onclick: () => { e.serie = e.serie.map(() => ({ ...e.serie[0] })); e._diverse = false; ridisegna(); } }, "Tutte uguali alla prima")),
       ];
     }
@@ -222,6 +231,7 @@ function editorForza(b, ridisegna) {
           piccoloBtn("Sposta giù", ICONE.giu, () => { sposta(b.esercizi, i, 1); ridisegna(); }),
           piccoloBtn("Togli l'esercizio", ICONE.cestino, () => { b.esercizi.splice(i, 1); ridisegna(); }))),
       el("div", { class: "righe", style: "grid-template-columns:minmax(0,2fr) minmax(0,1fr)" }, campo("Esercizio", nome), campo("Recupero", rec)),
+      misura,
       serie,
       campo("Nota dell'esercizio", nota));
   });
@@ -231,21 +241,32 @@ function editorForza(b, ridisegna) {
     el("p", { class: "sotto" }, "I chili qui sono il punto di partenza. Quando registri, l'app ti propone i carichi dell'ultima volta."));
 }
 
+// HIIT: i tempi del timer e gli esercizi del giro (quanti sono = esercizi per giro), uguali in ogni giro.
 function editorHiit(b, ridisegna) {
   b.esercizi ??= [];
-  const num = (k, etichetta, id) => el("label", { class: "campo" }, el("span", {}, etichetta),
-    el("input", { id, inputmode: "numeric", value: b[k] ?? "", oninput: (e) => { b[k] = numero(e.target.value) ?? 0; durata.textContent = `Durata: circa ${durataHiit(b)} minuti.`; } }));
-  const durata = el("p", { class: "sotto num" }, `Durata: circa ${durataHiit(b)} minuti.`);
+  if (!b.esercizi.length) b.esercizi.push({ nome: "" });
+  const durata = el("p", { class: "sotto num" });
+  const aggiornaDurata = () => (durata.textContent = `Durata: circa ${durataHiit(b)} minuti.`);
+  aggiornaDurata();
+  const num = (k, etichetta, id) => campo(etichetta, el("input", { id, class: "num", inputmode: "numeric", value: b[k] ?? "", oninput: (e) => { b[k] = numero(e.target.value) ?? 0; aggiornaDurata(); } }));
+  const quanti = campo("Esercizi per giro", el("input", { id: "s-quanti", class: "num", inputmode: "numeric", value: b.esercizi.length, onchange: (e) => {
+    const n = Math.max(1, Math.min(30, Math.round(numero(e.target.value) ?? 1)));
+    while (b.esercizi.length < n) b.esercizi.push({ nome: "" });
+    b.esercizi.length = n;
+    ridisegna();
+  } }));
   return el("div", { style: "display:grid;gap:14px" },
-    el("section", { class: "card modulo" }, el("h2", {}, "Tempi"),
-      el("div", { class: "righe" }, num("lavoro_s", "Lavoro (secondi)", "s-lavoro"), num("pausa_s", "Pausa (secondi)", "s-pausa"), num("giri", "Giri", "s-giri"), num("recupero_giri_s", "Recupero tra i giri (s)", "s-recgiri")),
+    el("section", { class: "card modulo" }, el("h2", {}, "Timer"),
+      el("div", { class: "righe", style: "align-items:end" }, num("lavoro_s", "Durata esercizio (s)", "s-lavoro"), quanti, num("pausa_s", "Pausa tra gli esercizi (s)", "s-pausa"),
+        num("giri", "Giri", "s-giri"), num("recupero_giri_s", "Pausa tra i giri (s)", "s-recgiri")),
       durata),
     el("section", { class: "card modulo" }, el("h2", {}, "Esercizi del giro"),
+      el("p", { class: "sotto" }, "In quest'ordine in ogni giro. Durante il timer vedi quello in corso e il successivo; quelli senza nome hanno solo il numero."),
       b.esercizi.map((e, i) => el("div", { style: "display:flex;gap:6px;align-items:center" },
         el("span", { class: "num", style: "width:20px;font-weight:700;text-align:center" }, String(i + 1)),
-        el("input", { id: `s-h${i}`, class: "input", list: "elenco-esercizi", value: e.nome ?? "", placeholder: "Scegli o scrivi un esercizio", "aria-label": `Esercizio ${i + 1}`, oninput: (ev) => (e.nome = ev.target.value) }),
+        el("input", { id: `s-h${i}`, class: "input", list: "elenco-esercizi", value: e.nome ?? "", placeholder: `Esercizio ${i + 1}`, "aria-label": `Esercizio ${i + 1}`, oninput: (ev) => (e.nome = ev.target.value) }),
         piccoloBtn("Sposta su", ICONE.su, () => { sposta(b.esercizi, i, -1); ridisegna(); }),
-        piccoloBtn("Togli", ICONE.chiudi, () => { b.esercizi.splice(i, 1); ridisegna(); }))),
+        b.esercizi.length > 1 ? piccoloBtn("Togli", ICONE.chiudi, () => { b.esercizi.splice(i, 1); ridisegna(); }) : null)),
       el("button", { type: "button", class: "btn tratteggio piccolo", style: "justify-self:start", onclick: () => { b.esercizi.push({ nome: "" }); ridisegna(); } }, "+ Aggiungi esercizio")));
 }
 
@@ -266,8 +287,11 @@ function editorCardio(b, ridisegna) {
 function pulisci(b) {
   const out = { ...b, titolo: (b.titolo ?? "").trim(), nota: (b.nota ?? "").trim() };
   delete out.id;
-  if (out.tipo === "Forza") out.esercizi = (b.esercizi ?? []).filter((e) => e.nome?.trim()).map((e) => ({ nome: e.nome.trim(), recupero_s: e.recupero_s ?? null,
-    ...(e.nota?.trim() ? { nota: e.nota.trim() } : {}), serie: (e.serie ?? []).filter((s) => s.rip || s.kg).map((s) => ({ kg: s.kg ?? null, rip: s.rip ?? null })) }));
-  if (out.tipo === "HIIT") out.esercizi = (b.esercizi ?? []).filter((e) => e.nome?.trim()).map((e) => ({ nome: e.nome.trim() }));
+  if (out.tipo === "Forza") out.esercizi = (b.esercizi ?? []).filter((e) => e.nome?.trim()).map((e) => {
+    const aTempo = e.unita === "sec";
+    return { nome: e.nome.trim(), recupero_s: e.recupero_s ?? null, ...(aTempo ? { unita: "sec" } : {}), ...(e.nota?.trim() ? { nota: e.nota.trim() } : {}),
+      serie: (e.serie ?? []).filter((s) => s.kg || (aTempo ? s.sec : s.rip)).map((s) => (aTempo ? { kg: s.kg ?? null, sec: s.sec ?? null } : { kg: s.kg ?? null, rip: s.rip ?? null })) };
+  });
+  if (out.tipo === "HIIT") out.esercizi = (b.esercizi ?? []).map((e, i) => ({ nome: e.nome?.trim() || `Esercizio ${i + 1}` }));
   return out;
 }

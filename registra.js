@@ -1,29 +1,60 @@
 // Registrare: sessione di forza serie per serie, file dei dispositivi (FIT, GPX, TCX), allenamento a mano, notte, peso.
 import { stato, registraVista, vai, rivai, testata, salvaGiorno, limiti, nomeTipo, coloreTipo, attive, modulo } from "./stato.js";
-import { precompilaEsercizio, vociDelGiorno, ESERCIZI } from "./dati.js";
+import { precompilaEsercizio, vociDelGiorno, ESERCIZI, testoSerie } from "./dati.js";
 import { riassumiFit, riassumiXml, idSessione, CAMPI_FILE, CAMPI_DETTAGLIO, TIPI, SOTTOTIPI_BICI, volume } from "./analisi-file.js";
 import { $, el, metti, icona, ICONE, oggi, fmtData, fmtGiorno, fmtNum, fmtKg, fmtSec, numero, avviso, esito, ricorda, conConferma, campo, opzione, testoKg } from "./util.js";
 import { caricaLettoreFit } from "./lettore-fit.js";
 import { metriche, barraZone } from "./dettaglio.js";
 import { contenutoScheda, riassuntoScheda } from "./schede.js";
 import { Registratore } from "./registratore.js";
-import { disponibile, collegaFascia } from "./sorgenti.js";
+import { disponibile, collegaFascia, schermoAcceso } from "./sorgenti.js";
+import { programmaSegnali, sbloccaAudio, suoniAttivi, impostaSuoni } from "./suoni.js";
 
 const occupato = (id) => stato.sessioni.some((s) => s.id === id);
 
-registraVista("registra", { vivo: false, render(main, param) {
-  if (param.tipo === "forza") return moduloForza(main, param);
-  if (param.tipo === "notte") return moduloNotte(main, param);
-  if (param.tipo === "peso") return moduloPeso(main, param);
-  return moduloFile(main, param);
-} });
+registraVista("registra", {
+  vivo: false,
+  // Uscendo dalla forza in corso si spengono bip del recupero e schermo acceso; tornandoci ripartono.
+  lascia() { annullaBipRecupero?.(); annullaBipRecupero = null; fermaSchermoForza?.(); fermaSchermoForza = null; },
+  render(main, param) {
+    if (param.tipo === "forza") return moduloForza(main, param);
+    if (param.tipo === "mano") return moduloMano(main, param);
+    if (param.tipo === "notte") return moduloNotte(main, param);
+    if (param.tipo === "peso") return moduloPeso(main, param);
+    return moduloFile(main, param);
+  },
+});
 
 /* ---------- Forza ---------- */
 let timer = 0;
 // Fascia collegata durante la forza: resta collegata anche se la pagina si ridisegna o si cambia vista.
 let fasciaForza = null; // { rec: Registratore, fascia, stato }
 async function staccaFasciaForza() { const f = fasciaForza; fasciaForza = null; await f?.fascia?.scollega?.(); }
+// Bip a 3-2-1 prima della fine del recupero (uno alla volta: una nuova spunta lo sostituisce) e schermo acceso.
+let annullaBipRecupero = null, fermaSchermoForza = null, schermoInArrivo = false;
+function programmaRecupero(fine) {
+  annullaBipRecupero?.();
+  const tra = ((fine ?? 0) - Date.now()) / 1000;
+  annullaBipRecupero = tra > 0.5 ? programmaSegnali([{ tra_s: tra, tono: "via" }]) : null;
+}
 
+// Forza avviata da Registra sessione: parte il cronometro e la fascia collegata nella preparazione manda il battito qui.
+export function iniziaForza({ scheda, avvio, fascia, collega }) {
+  if (fasciaForza && fasciaForza.fascia !== fascia) staccaFasciaForza();
+  if (fascia) {
+    const rec = new Registratore({ tipo: "Forza", conGps: false });
+    rec.avvia(avvio);
+    const f = { rec, fascia, stato: "connessa" };
+    collega((m) => rec.battito(m), (st) => (f.stato = st));
+    fasciaForza = f;
+  }
+  ricorda.scrivi("bozza-forza", null);
+  vai("registra", { tipo: "forza", scheda, data: oggi(), avvio });
+}
+// Scarta la sessione di forza in corso (da Oggi).
+export async function scartaForza() { ricorda.scrivi("bozza-forza", null); programmaRecupero(null); await staccaFasciaForza(); }
+
+// Tre modi: dal vivo (`avvio`, o `riprendi` la bozza salvata), a mano (`aMano`, da Allenamenti) e modifica (`id`).
 function moduloForza(main, param) {
   clearInterval(timer);
   const esistente = param.id ? stato.sessioni.find((s) => s.id === param.id) : null;
@@ -31,19 +62,28 @@ function moduloForza(main, param) {
   let b = param.bozza;
   if (!b && esistente) {
     b = { data: esistente.data, scheda: esistente.scheda ?? null, inizioMs: null, durata: esistente.durata_min ?? null, fc_media: esistente.fc_media ?? null, fc_max: esistente.fc_max ?? null, nota: esistente.nota ?? "",
-      esercizi: (esistente.esercizi ?? []).map((e) => ({ nome: e.nome, recupero_s: e.recupero_s ?? null, ultima: null, serie: (e.serie ?? []).map((s) => ({ kg: s.kg ?? null, rip: s.rip ?? null, fatta: true })) })) };
+      esercizi: (esistente.esercizi ?? []).map((e) => ({ nome: e.nome, recupero_s: e.recupero_s ?? null, unita: e.unita ?? null, ultima: null, serie: (e.serie ?? []).map((s) => ({ kg: s.kg ?? null, rip: s.rip ?? null, sec: s.sec ?? null, fatta: true })) })) };
   }
+  if (!b && param.riprendi) { b = ricorda.leggi("bozza-forza"); if (b && b.vivo === undefined) b.vivo = !!b.inizioMs; } // le bozze delle versioni 1.0 non avevano `vivo`
   if (!b) {
     const data = param.data ?? oggi();
-    const salvata = ricorda.leggi("bozza-forza");
-    const scheda = param.scheda ?? (schedeForza.length === 1 ? schedeForza[0][0] : null);
-    if (salvata && salvata.data === data && (!param.scheda || salvata.scheda === param.scheda)) b = salvata;
-    else b = { data, scheda, inizioMs: Date.now(), durata: null, fc_media: null, fc_max: null, nota: "", esercizi: dallaScheda(scheda, data) };
+    const scheda = param.scheda ?? (param.aMano && schedeForza.length === 1 ? schedeForza[0][0] : null);
+    b = { data, scheda, inizioMs: param.aMano ? null : param.avvio ?? Date.now(), vivo: !param.aMano, durata: null, fc_media: null, fc_max: null, nota: "", esercizi: dallaScheda(scheda, data) };
   }
-  const ridisegna = () => { if (!esistente) ricorda.scrivi("bozza-forza", b); rivai("registra", { ...param, bozza: b }); };
-  const memorizza = () => { if (!esistente) ricorda.scrivi("bozza-forza", b); aggiornaBarra(); };
+  // Solo la sessione dal vivo resta salvata nel browser, per riprenderla da Oggi.
+  const conserva = () => { if (b.vivo && !esistente) ricorda.scrivi("bozza-forza", b); };
+  const ridisegna = () => { conserva(); rivai("registra", { ...param, bozza: b }); };
+  const memorizza = () => { conserva(); aggiornaBarra(); };
   const scheda = b.scheda ? stato.schede[b.scheda] : null;
-  const torna = () => vai(esistente ? "allenamenti" : "oggi");
+  const torna = () => vai(esistente || param.aMano ? "allenamenti" : "oggi");
+  if (b.vivo) {
+    conserva();
+    if (!fermaSchermoForza && !schermoInArrivo) {
+      schermoInArrivo = true;
+      schermoAcceso(true).then((f) => { schermoInArrivo = false; if (stato.vista === "registra" && stato.param.tipo === "forza") fermaSchermoForza = f; else f(); });
+    }
+    programmaRecupero(b.finePausa);
+  }
 
   const data = el("input", { id: "fz-data", type: "date", value: b.data, onchange: (e) => { b.data = e.target.value || oggi(); b.esercizi.forEach((x) => (x.ultima = precompilaEsercizio(x, stato.sessioni, b.data).ultima)); ridisegna(); } });
   const sel = el("select", { id: "fz-scheda", onchange: (e) => { b.scheda = e.target.value || null; b.esercizi = dallaScheda(b.scheda, b.data); ridisegna(); } },
@@ -62,14 +102,15 @@ function moduloForza(main, param) {
       const f = { rec, fascia: null, stato: "connessa" };
       f.fascia = await collegaFascia((m) => rec.battito(m), (s) => (f.stato = s));
       fasciaForza = f;
-      b.inizioMs ??= Date.now();
       ridisegna();
     } catch (e) { esito(esitoFascia, e?.name === "NotFoundError" ? "Nessuna fascia scelta." : "Non collegata: " + (e?.message ?? "errore"), "err"); collega.disabled = false; }
   };
-  const boxFascia = esistente || !disponibile().fascia ? null : fasciaForza
+  const boxFascia = !b.vivo || esistente || !disponibile().fascia ? null : fasciaForza
     ? el("div", { class: "fascia-riga" }, el("span", {}, el("small", {}, fasciaForza.fascia?.nome ?? "Fascia"), battitoVivo),
       el("button", { type: "button", class: "lnk", onclick: async () => { await staccaFasciaForza(); ridisegna(); } }, "Scollega"))
     : el("div", { class: "fascia-riga" }, collega, esitoFascia);
+  const audio = b.vivo ? el("button", { type: "button", class: "lnk", style: "justify-self:start",
+    onclick: (ev) => { impostaSuoni(!suoniAttivi()); sbloccaAudio(); programmaRecupero(b.finePausa); ev.target.textContent = testoAudio(); } }, testoAudio()) : null;
 
   const tempo = el("b", { class: "num" }, "—");
   const contaSerie = el("b", { class: "num" }, "—");
@@ -97,33 +138,36 @@ function moduloForza(main, param) {
   }
 
   const esercizi = b.esercizi.map((e, i) => {
-    const u = e.ultima;
+    const u = e.ultima, aTempo = e.unita === "sec";
     const griglia = el("div", { class: "griglia-serie" },
-      el("span", { class: "intest" }, "Serie"), el("span", { class: "intest" }, "kg"), el("span", { class: "intest" }, "Rip."), el("span", { class: "intest", style: "text-align:center" }, "Fatta"),
+      el("span", { class: "intest" }, "Serie"), el("span", { class: "intest" }, "kg"), el("span", { class: "intest" }, aTempo ? "Sec." : "Rip."), el("span", { class: "intest", style: "text-align:center" }, "Fatta"),
       e.serie.map((s, j) => {
         const spunta = el("button", { type: "button", class: "spunta", "aria-pressed": String(!!s.fatta), "aria-label": `${e.nome}, serie ${j + 1} fatta` }, icona(ICONE.spunta, { spessore: 2.6 }));
         spunta.onclick = () => {
           s.fatta = !s.fatta;
           spunta.setAttribute("aria-pressed", String(s.fatta));
-          if (s.fatta) { b.inizioMs ??= Date.now(); if (e.recupero_s) b.finePausa = Date.now() + e.recupero_s * 1000; }
+          if (s.fatta && b.vivo && e.recupero_s) { sbloccaAudio(); b.finePausa = Date.now() + e.recupero_s * 1000; programmaRecupero(b.finePausa); }
           memorizza();
         };
         return [
           el("span", { class: "n" }, String(j + 1)),
           el("input", { id: `fz-${i}-${j}-kg`, inputmode: "decimal", value: testoKg(s.kg), placeholder: "—", "aria-label": `${e.nome}, serie ${j + 1}, chili`, oninput: (ev) => { s.kg = numero(ev.target.value); memorizza(); } }),
-          el("input", { id: `fz-${i}-${j}-rip`, inputmode: "numeric", value: s.rip ?? "", placeholder: "—", "aria-label": `${e.nome}, serie ${j + 1}, ripetizioni`, oninput: (ev) => { s.rip = numero(ev.target.value); memorizza(); } }),
+          aTempo
+            ? el("input", { id: `fz-${i}-${j}-sec`, inputmode: "numeric", value: s.sec ?? "", placeholder: "—", "aria-label": `${e.nome}, serie ${j + 1}, secondi`, oninput: (ev) => { s.sec = numero(ev.target.value); memorizza(); } })
+            : el("input", { id: `fz-${i}-${j}-rip`, inputmode: "numeric", value: s.rip ?? "", placeholder: "—", "aria-label": `${e.nome}, serie ${j + 1}, ripetizioni`, oninput: (ev) => { s.rip = numero(ev.target.value); memorizza(); } }),
           spunta,
         ];
       }));
     return el("section", { class: "card esercizio" },
       el("div", { class: "esercizio-testa" }, el("h2", {}, `${i + 1}. ${e.nome}`), e.recupero_s ? el("span", {}, `rec. ${e.recupero_s < 60 ? e.recupero_s + " s" : String(e.recupero_s / 60).replace(".", ",") + " min"}`) : null),
       (e.nota || scheda?.esercizi?.find((x) => x.nome === e.nome)?.nota) ? el("p", { class: "nota-esercizio" }, e.nota || scheda.esercizi.find((x) => x.nome === e.nome).nota) : null,
-      el("p", { class: "sotto num" }, u ? `Ultima volta, ${fmtData(u.data, { day: "numeric", month: "short" })}: ${u.serie.map(fmtSerie).join(" · ")}` : "Prima volta: scegli carichi che ti lasciano 2 ripetizioni di margine."),
+      el("p", { class: "sotto num" }, u ? `Ultima volta, ${fmtData(u.data, { day: "numeric", month: "short" })}: ${u.serie.map((x) => testoSerie(x, u.unita)).join(" · ")}` : aTempo ? "Prima volta: scegli una durata che tieni bene fino in fondo." : "Prima volta: scegli carichi che ti lasciano 2 ripetizioni di margine."),
       griglia,
-      el("div", { style: "display:flex;justify-content:space-between;align-items:center;gap:8px" },
+      el("div", { style: "display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap" },
         el("div", { style: "display:flex;gap:4px" },
-          el("button", { type: "button", class: "btn tratteggio piccolo", onclick: () => { const x = e.serie[e.serie.length - 1]; e.serie.push({ kg: x?.kg ?? null, rip: x?.rip ?? null, fatta: false }); ridisegna(); } }, "+ Serie"),
+          el("button", { type: "button", class: "btn tratteggio piccolo", onclick: () => { const x = e.serie[e.serie.length - 1]; e.serie.push({ kg: x?.kg ?? null, rip: x?.rip ?? null, sec: x?.sec ?? null, fatta: false }); ridisegna(); } }, "+ Serie"),
           e.serie.length > 1 ? el("button", { type: "button", class: "btn piccolo pericolo", onclick: () => { e.serie.pop(); ridisegna(); } }, "− Serie") : null),
+        el("button", { type: "button", class: "lnk", onclick: () => { e.unita = aTempo ? null : "sec"; ridisegna(); } }, aTempo ? "Conta le ripetizioni" : "Conta i secondi"),
         el("span", { id: `fz-delta-${i}`, class: "delta", hidden: true })));
   });
 
@@ -144,8 +188,9 @@ function moduloForza(main, param) {
 
   const salva = el("button", { type: "button", class: "btn primario" }, esistente ? "Salva le modifiche" : "Salva sessione");
   salva.onclick = async () => {
-    const lista = b.esercizi.map((e) => ({ nome: e.nome, recupero_s: e.recupero_s ?? null, serie: serieDaSalvare(e, b).map(({ kg, rip }) => ({ kg, rip })) })).filter((e) => e.serie.length);
-    if (!lista.length) return esito(esitoF, "Compila almeno una serie con le ripetizioni.", "err");
+    const lista = b.esercizi.map((e) => ({ nome: e.nome, recupero_s: e.recupero_s ?? null, ...(e.unita === "sec" ? { unita: "sec" } : {}),
+      serie: serieDaSalvare(e, b).map(({ kg, rip, sec }) => (e.unita === "sec" ? { kg, sec } : { kg, rip })) })).filter((e) => e.serie.length);
+    if (!lista.length) return esito(esitoF, "Compila almeno una serie con ripetizioni, secondi o chili.", "err");
     salva.disabled = true;
     try {
       const durata = b.durata ?? (b.inizioMs ? Math.max(1, Math.round((Date.now() - b.inizioMs) / 60000)) : null);
@@ -163,21 +208,19 @@ function moduloForza(main, param) {
         await stato.archivio.scrivi("sessioni", id, { ...base, nome: scheda?.titolo || "Forza", fonte: misure ? "Inserita nell'app, battito dalla fascia" : "Inserita nell'app" });
       }
       if (misure) await stato.archivio.scrivi("dettagli", id, { curva_fc: misure.curva_fc, curve: null, traccia: null });
-      await staccaFasciaForza();
-      ricorda.scrivi("bozza-forza", null);
+      if (!esistente && b.vivo) await scartaForza();
       clearInterval(timer);
       avviso(esistente ? "Sessione aggiornata" : "Sessione di forza salvata");
       torna();
     } catch (e) { esito(esitoF, "Non salvata: " + (e?.message ?? "errore"), "err"); salva.disabled = false; }
   };
-  const annulla = !esistente && ricorda.leggi("bozza-forza") ? conConferma(el("button", { type: "button", class: "lnk" }, "Ricomincia da capo"), "Tocca di nuovo: perdi le serie segnate", async () => {
-    ricorda.scrivi("bozza-forza", null);
-    await staccaFasciaForza();
-    vai("registra", { tipo: "forza", data: b.data, scheda: b.scheda });
+  const annulla = b.vivo && !esistente ? conConferma(el("button", { type: "button", class: "lnk" }, "Ricomincia da capo"), "Tocca di nuovo: perdi le serie segnate", async () => {
+    await scartaForza();
+    vai("registra", { tipo: "forza", data: b.data, scheda: b.scheda, avvio: Date.now() });
   }) : null;
 
-  metti(main, 
-    testata({ titolo: scheda?.titolo || "Forza", sopra: fmtGiorno(b.data) + (esistente ? " · modifica" : ""), indietro: torna }),
+  metti(main,
+    testata({ titolo: scheda?.titolo || "Forza", sopra: fmtGiorno(b.data) + (esistente ? " · modifica" : param.aMano ? " · a mano" : ""), indietro: torna }),
     el("section", { class: "card modulo" },
       el("div", { class: "righe" }, campo("Giorno", data), esistente ? null : campo("Scheda", sel)),
       el("div", { class: "tiles riquadri" },
@@ -186,13 +229,13 @@ function moduloForza(main, param) {
         el("div", { class: "tile" }, el("small", {}, "Volume"), volumeTile)),
       boxFascia,
       scheda?.nota ? el("p", { class: "nota-scheda" }, scheda.nota) : null,
-      el("p", { class: "sotto" }, "Spunta le serie mentre le fai: parte il recupero. Se non spunti niente, salvo tutte le serie compilate."),
-      annulla),
-    esercizi.length ? esercizi : el("p", { class: "vuoto" }, schedeForza.length ? "Scegli una scheda qui sopra o aggiungi gli esercizi uno alla volta." : "Aggiungi gli esercizi uno alla volta, oppure crea una scheda nella Settimana."),
+      el("p", { class: "sotto" }, b.vivo ? "Spunta le serie mentre le fai: parte il recupero. Se non spunti niente, salvo tutte le serie compilate." : "Spunta le serie fatte, oppure lascia tutto: salvo le serie compilate."),
+      audio, annulla),
+    esercizi.length ? esercizi : el("p", { class: "vuoto" }, schedeForza.length ? "Scegli una scheda qui sopra o aggiungi gli esercizi uno alla volta." : "Aggiungi gli esercizi uno alla volta, oppure crea una scheda nel Piano."),
     el("section", { class: "card" }, el("div", { style: "display:flex;gap:8px" }, nuovoNome, el("button", { type: "button", class: "btn", onclick: aggiungi }, "Aggiungi")),
       el("datalist", { id: "fz-elenco" }, [...nomi].sort((x, y) => x.localeCompare(y)).map((n) => el("option", { value: n })))),
     el("section", { class: "card modulo" }, el("h2", {}, "Durata, battito e note"),
-      el("div", { class: "righe" }, num("durata", "Durata (min)", "fz-durata", "dal cronometro"), num("fc_media", "FC media", "fz-fcm"), num("fc_max", "FC massima", "fz-fcx")),
+      el("div", { class: "righe" }, num("durata", "Durata (min)", "fz-durata", b.vivo ? "dal cronometro" : ""), num("fc_media", "FC media", "fz-fcm"), num("fc_max", "FC massima", "fz-fcx")),
       campo("Nota", nota), esitoF));
 
   const barra = $("barra-fondo");
@@ -203,58 +246,54 @@ function moduloForza(main, param) {
   timer = setInterval(() => { if (!riass.isConnected) return clearInterval(timer); aggiornaBarra(); }, 1000);
 }
 
+const testoAudio = () => (suoniAttivi() ? "Bip a fine recupero: sì" : "Bip a fine recupero: no");
 function dallaScheda(id, data) {
   const s = id ? stato.schede[id] : null;
   return (s?.esercizi ?? []).map((e) => precompilaEsercizio(e, stato.sessioni, data));
 }
-const fmtSerie = (s) => (s.kg ? `${fmtKg(s.kg)}×${s.rip ?? "—"}` : `${s.rip ?? "—"} rip`);
 // Con almeno una serie spuntata nella sessione si salvano solo le spuntate; altrimenti tutte quelle compilate.
 function serieDaSalvare(e, b) {
   const qualcunaFatta = b.esercizi.some((x) => x.serie.some((s) => s.fatta));
-  return e.serie.filter((s) => (qualcunaFatta ? s.fatta : true) && (s.rip > 0 || s.kg > 0));
+  return e.serie.filter((s) => (qualcunaFatta ? s.fatta : true) && (s.kg > 0 || (e.unita === "sec" ? s.sec > 0 : s.rip > 0)));
 }
-// Differenza con l'ultima volta: chili massimi, altrimenti ripetizioni totali.
+// Differenza con l'ultima volta: chili massimi, altrimenti ripetizioni (o secondi) totali.
 function delta(e, b) {
   const ora = serieDaSalvare(e, b), prima = e.ultima?.serie ?? [];
-  if (!ora.length || !prima.length) return ["", ""];
+  if (!ora.length || !prima.length || (e.ultima.unita ?? null) !== (e.unita ?? null)) return ["", ""];
   const maxKg = (l) => Math.max(0, ...l.map((s) => s.kg ?? 0));
   const dk = maxKg(ora) - maxKg(prima);
   if (dk) return [`${dk > 0 ? "+" : "−"}${fmtKg(Math.abs(dk))} kg`, dk > 0 ? "su" : "giu"];
-  const rip = (l) => l.reduce((a, s) => a + (s.rip ?? 0), 0);
-  const dr = rip(ora) - rip(prima);
-  if (dr) return [`${dr > 0 ? "+" : "−"}${Math.abs(dr)} rip`, dr > 0 ? "su" : "giu"];
+  const k = e.unita === "sec" ? "sec" : "rip";
+  const tot = (l) => l.reduce((a, s) => a + (s[k] ?? 0), 0);
+  const dr = tot(ora) - tot(prima);
+  if (dr) return [`${dr > 0 ? "+" : "−"}${Math.abs(dr)}${k === "sec" ? '"' : " rip"}`, dr > 0 ? "su" : "giu"];
   return ["come l'ultima volta", ""];
 }
 
-/* ---------- File e inserimento a mano ---------- */
+/* ---------- File ---------- */
 let sdk = null;
 
 function moduloFile(main, param) {
-  const aMano = !!param.aMano;
-  const torna = () => vai("oggi");
-  const scelta = el("div", { class: "seg", role: "group", "aria-label": "Come registrare" },
-    el("button", { type: "button", "aria-pressed": String(!aMano), onclick: () => vai("registra", { ...param, aMano: false }) }, "Da file"),
-    el("button", { type: "button", "aria-pressed": String(aMano), onclick: () => vai("registra", { ...param, aMano: true }) }, "A mano"));
-  // Avviato da una scheda (HIIT o cardio): la scheda resta sotto gli occhi, con esercizi, tempi e nota.
+  // Avviato da Registra sessione (HIIT o cardio): la scheda resta sotto gli occhi, con esercizi, tempi e nota.
   const s = param.voce?.scheda ? stato.schede[param.voce.scheda] : null;
   const schedaBox = s ? el("section", { class: "card" },
     el("div", { class: "card-testa" }, el("h2", {}, s.titolo || nomeTipo(s.tipo)), el("span", { class: "sotto" }, riassuntoScheda(s))),
     s.nota ? el("p", { class: "nota-scheda" }, s.nota) : null,
     contenutoScheda(s)) : null;
   metti(main,
-    testata({ titolo: aMano ? "Allenamento a mano" : "Importa file", sopra: "Registra", indietro: torna }),
+    testata({ titolo: "Importa file", sopra: "Registra", indietro: () => vai("oggi") }),
     schedaBox,
-    scelta,
-    aMano ? formManuale(param) : formFile(param));
+    formFile(param));
 }
 // Salva un allenamento riassunto da un file o da una registrazione dal vivo: documento leggero in sessioni, traccia e
-// curve in dettagli. Un allenamento con lo stesso inizio, o inserito a mano quel giorno, viene aggiornato.
+// curve in dettagli. Un allenamento con lo stesso inizio, o inserito a mano quel giorno, viene aggiornato. `extra`:
+// altri campi da salvare (per esempio i tempi del timer HIIT).
 export async function salvaRiassunto(r, param = {}, presi = new Set()) {
   const stessa = (r.inizio && stato.sessioni.find((s) => s.inizio && s.inizio === r.inizio))
     ?? stato.sessioni.find((s) => s.data === r.data && s.tipo === r.tipo && !s.inizio && !s.file);
   const id = stessa?.id ?? idSessione(r.data, r.tipo, (x) => presi.has(x) || occupato(x));
   presi.add(id);
-  const campi = Object.fromEntries(CAMPI_FILE.map((c) => [c, r[c] ?? null]));
+  const campi = { ...Object.fromEntries(CAMPI_FILE.map((c) => [c, r[c] ?? null])), ...(param.extra ?? {}) };
   const idScheda = schedaPer(param, r.tipo, r.data);
   const schedaVoce = idScheda ? stato.schede[idScheda] : null;
   const doc = stessa
@@ -265,8 +304,9 @@ export async function salvaRiassunto(r, param = {}, presi = new Set()) {
   return id;
 }
 
-// La scheda da collegare all'allenamento: quella da cui sei partito, se è dello stesso tipo, altrimenti quella del giorno.
-const schedaPer = (param, tipo, data) => (param.voce?.scheda && param.voce.tipo === tipo ? param.voce.scheda : vociDelGiorno(stato.settimana, data).find((v) => v.tipo === tipo)?.scheda ?? null);
+// La scheda da collegare all'allenamento: quella scelta partendo (anche nessuna), se è dello stesso tipo, altrimenti
+// quella della voce del giorno.
+const schedaPer = (param, tipo, data) => (param.voce?.tipo === tipo ? param.voce.scheda ?? null : vociDelGiorno(stato.settimana, data).find((v) => v.tipo === tipo)?.scheda ?? null);
 
 function formFile(param) {
   const attesa = [];
@@ -315,7 +355,7 @@ function formFile(param) {
       el("option", { value: "" }, "Scegli il tipo…"), [...new Set([...TIPI])].map((t) => el("option", { value: t, selected: t === r.tipo }, t)));
     const sotto = el("select", { "aria-label": "Tipo di bici", onchange: (e) => (r.sottotipo = e.target.value || null) },
       el("option", { value: "" }, "Bici non indicata"), SOTTOTIPI_BICI.map((t) => el("option", { value: t, selected: t === r.sottotipo }, t)));
-    metti(riga, 
+    metti(riga,
       el("div", { class: "testa" }, el("i", { class: "dot", style: `background:${coloreTipo(r.tipo)}` }), `${fmtGiorno(r.data)}${r.inizio ? " · " + new Date(r.inizio).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }) : ""}`,
         el("span", { class: "sotto", style: "font-weight:600" }, stessa ? "· aggiorna quello già salvato" : "· nuovo")),
       el("div", { class: "righe" }, el("label", { class: "campo" }, el("span", {}, "Tipo"), tipo), r.tipo === "Bici" ? el("label", { class: "campo" }, el("span", {}, "Bici"), sotto) : null),
@@ -346,19 +386,31 @@ function formFile(param) {
     el("div", { class: "azioni" }, salva, esitoI));
 }
 
+/* ---------- A mano (da Allenamenti) ---------- */
+function moduloMano(main, param) {
+  metti(main,
+    testata({ titolo: "Allenamento a mano", sopra: "Allenamenti", indietro: () => vai("allenamenti") }),
+    formManuale(param));
+}
+
+// La forza ha la sua scheda serie per serie; gli altri tipi durata, distanza e battito.
 function formManuale(param) {
   const v = { tipo: param.voce?.tipo ?? (attive().find((t) => t !== "Forza") ?? "Corsa"), sottotipo: param.voce?.sottotipo ?? null };
   const tipi = el("div", { class: "seg", role: "radiogroup", "aria-label": "Tipo" });
   const sotto = el("div", { class: "seg", role: "radiogroup", "aria-label": "Bici" });
   const campoSotto = el("fieldset", { class: "campo" }, el("legend", {}, "Bici"), sotto);
+  const inp = (id, tipo = "text", extra = {}) => el("input", { id, type: tipo, inputmode: tipo === "text" ? "decimal" : undefined, ...extra });
+  const data = inp("m-data", "date", { value: param.data ?? oggi() });
   const disegna = () => {
-    tipi.replaceChildren(...attive().filter((t) => t !== "Forza").map((t) => opzione("m-tipo", t, t, v.tipo === t, () => { v.tipo = t; disegna(); })));
+    tipi.replaceChildren(...attive().map((t) => opzione("m-tipo", t, t, v.tipo === t, () => {
+      if (t === "Forza") return vai("registra", { tipo: "forza", aMano: true, data: data.value || oggi(), sezione: "allenamenti" });
+      v.tipo = t;
+      disegna();
+    })));
     sotto.replaceChildren(...["Non indicata", ...SOTTOTIPI_BICI].map((t) => opzione("m-sotto", t, t, (v.sottotipo ?? "Non indicata") === t, () => (v.sottotipo = t === "Non indicata" ? null : t))));
     campoSotto.hidden = v.tipo !== "Bici";
   };
   disegna();
-  const inp = (id, tipo = "text", extra = {}) => el("input", { id, type: tipo, inputmode: tipo === "text" ? "decimal" : undefined, ...extra });
-  const data = inp("m-data", "date", { value: param.data ?? oggi() });
   const campi = { durata_min: inp("m-durata"), km: inp("m-km"), salita_m: inp("m-salita"), fc_media: inp("m-fcm"), fc_max: inp("m-fcx") };
   const nota = el("textarea", { id: "m-nota" });
   const esitoM = el("span", { class: "esito", role: "status" });
@@ -374,7 +426,7 @@ function formManuale(param) {
       await stato.archivio.scrivi("sessioni", id, { data: data.value, tipo: v.tipo, sottotipo: v.tipo === "Bici" ? v.sottotipo : null, nome: schedaVoce?.titolo ?? "", scheda: idScheda,
         ...valori, z1_min: null, z2_min: null, z3_min: null, z4_min: null, z5_min: null, nota: nota.value.trim(), fonte: "Inserito a mano" });
       avviso("Allenamento salvato");
-      vai("oggi");
+      vai("allenamenti");
     } catch (e) { esito(esitoM, "Non salvato: " + (e?.message ?? "errore"), "err"); salva.disabled = false; }
   };
   return el("section", { class: "card modulo" },
@@ -382,7 +434,7 @@ function formManuale(param) {
     el("div", { class: "righe" }, campo("Giorno", data), campo("Durata (min) *", campi.durata_min)),
     el("div", { class: "righe" }, campo("Distanza (km)", campi.km), campo("Salita (m)", campi.salita_m), campo("FC media", campi.fc_media), campo("FC massima", campi.fc_max)),
     campo("Nota", nota),
-    el("p", { class: "sotto" }, "Senza file non ci sono traccia, curva del battito e tempo in zona."),
+    el("p", { class: "sotto" }, "Senza file non ci sono traccia, curva del battito e tempo in zona. Per la forza si apre la scheda serie per serie."),
     el("div", { class: "azioni" }, salva, esitoM));
 }
 

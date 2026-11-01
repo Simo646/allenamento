@@ -10,7 +10,8 @@ import "./registra.js";
 import "./analisi.js";
 import "./impostazioni.js";
 import { leggiBozza, riprendiInterrotta, scartaInterrotta, registrazioneInCorso } from "./dal-vivo.js";
-import { disponibile, nativo } from "./sorgenti.js";
+import { scartaForza } from "./registra.js";
+import { nativo } from "./sorgenti.js";
 import { conConferma } from "./util.js";
 
 /* ---------- Oggi ---------- */
@@ -26,6 +27,7 @@ registraVista("oggi", { vivo: true, render(main) {
   metti(main, 
     testata({ titolo: "Oggi" }),
     bandaInterrotta(),
+    bandaForza(),
     bandaAggiornamento(),
     striscia(d),
     cardProgramma(d, voci, fuori),
@@ -51,7 +53,7 @@ function striscia(d) {
 }
 
 function cardProgramma(d, voci, fuori) {
-  const righe = voci.map((v) => rigaVoce(d, v));
+  const righe = voci.map(rigaVoce);
   for (const s of fuori) righe.push(el("div", { class: "voce-oggi" },
     el("div", { class: "voce-riga" }, iconaTipo(s.tipo),
       el("button", { type: "button", class: "voce-testo", onclick: () => apriDettaglio(s.id) },
@@ -66,7 +68,7 @@ function cardProgramma(d, voci, fuori) {
       el("div", { style: "min-width:0" }, el("div", { class: "etichetta" }, "In programma oggi"), el("div", { class: "programma-nome" + (nome.length > 9 ? " lungo" : "") }, nome)),
       zonaBox(zone, tipi.includes("Forza"))),
     righe.length ? el("div", { class: "voci" }, righe)
-      : el("p", { class: "vuoto" }, "Giorno di riposo. Se ti alleni lo stesso, registralo con i pulsanti qui sotto."),
+      : el("p", { class: "vuoto" }, "Giorno di riposo. Se ti alleni lo stesso, tocca Registra sessione qui sotto."),
     el("div", { class: "programma-piede" }, el("button", { type: "button", class: "lnk", onclick: () => vai("settimana") }, "Tutta la settimana")));
 }
 
@@ -79,13 +81,10 @@ function zonaBox(zone, forza) {
 
 const fattoSegno = () => el("span", { class: "fatto-segno" }, icona(ICONE.spunta, { spessore: 2.6 }), "Fatto");
 
-function rigaVoce(d, v) {
+function rigaVoce(v) {
   const { titolo, sotto, zona, scheda } = descriviVoce(v);
   const aperta = aperte.has(v.id);
-  const azione = v.fatta ? fattoSegno()
-    : v.tipo === "Forza" ? el("button", { type: "button", class: "btn primario piccolo", onclick: () => vai("registra", { tipo: "forza", scheda: v.scheda, data: d }) }, "Registra")
-    : dalVivo() ? el("button", { type: "button", class: "btn primario piccolo", onclick: () => vai("dal-vivo", { voce: v }) }, "Inizia")
-    : el("button", { type: "button", class: "btn piccolo", onclick: () => vai("registra", { tipo: "file", data: d, voce: v }) }, v.tipo === "HIIT" ? "Registra" : "Importa");
+  const azione = v.fatta ? fattoSegno() : null;
   const dettaglio = [];
   // Si apre solo se c'è qualcosa da leggere: esercizi, tempi o una nota.
   const apribile = !!(scheda && (scheda.tipo === "Forza" || scheda.tipo === "HIIT")) || !!(v.nota || scheda?.nota);
@@ -103,9 +102,6 @@ function rigaVoce(d, v) {
 }
 
 
-// Registrazione dal vivo: solo dove GPS o fascia funzionano (app Android, app dal sito), non dentro claude.ai.
-const dalVivo = () => { const d = disponibile(); return !d.inClaude && (d.gps || d.fascia); };
-
 // Una registrazione rimasta a metà (app chiusa o telefono spento): riprenderla, salvarla o scartarla.
 function bandaInterrotta() {
   const b = stato.interrotta;
@@ -120,19 +116,30 @@ function bandaInterrotta() {
       conConferma(el("button", { type: "button", class: "btn piccolo pericolo" }, "Scarta"), "Tocca di nuovo", async () => { await scartaInterrotta(); chiudi(); })));
 }
 
+// Una sessione di forza avviata e non ancora salvata (app chiusa o vista cambiata): riprenderla o scartarla.
+function bandaForza() {
+  const b = ricorda.leggi("bozza-forza");
+  if (!b?.inizioMs) return null;
+  const quando = new Date(b.inizioMs).toLocaleString("it-IT", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  return el("section", { class: "banda", style: "display:grid;gap:8px" },
+    el("span", {}, `Sessione di forza in corso, iniziata ${quando}.`),
+    el("div", { class: "azioni" },
+      el("button", { type: "button", class: "btn piccolo primario", onclick: () => vai("registra", { tipo: "forza", riprendi: true }) }, "Riprendi"),
+      conConferma(el("button", { type: "button", class: "btn piccolo pericolo" }, "Scarta"), "Tocca di nuovo", async () => { await scartaForza(); programmaRender(); })));
+}
+
 // App Android: se sul sito c'è una versione più nuova, lo dice con il collegamento per scaricarla.
 function bandaAggiornamento() {
   const a = stato.aggiornamento;
   return a ? el("p", { class: "banda info" }, `Nuova versione dell'app (${a.versione}). `, el("a", { href: a.pagina, target: "_blank", rel: "noopener" }, "Scaricala")) : null;
 }
 
+// Registra sessione: si scelgono attività e scheda (proposte quelle di oggi) e si parte quando si è pronti.
 function azioniRapide() {
   const b = (testo, f) => el("button", { type: "button", class: "btn", onclick: f }, testo);
   return el("div", { class: "azioni-rapide", role: "group", "aria-label": "Registra" },
-    dalVivo() ? el("button", { type: "button", class: "btn primario", onclick: () => vai("dal-vivo", {}) }, "Dal vivo") : null,
-    stato.profilo.attivita.includes("Forza") ? b("+ Forza", () => vai("registra", { tipo: "forza", data: oggi() })) : null,
+    el("button", { type: "button", class: "btn primario grande largo", onclick: () => vai("dal-vivo", {}) }, "Registra sessione"),
     b("Importa file", () => vai("registra", { tipo: "file", data: oggi() })),
-    b("+ A mano", () => vai("registra", { tipo: "file", data: oggi(), aMano: true })),
     modulo("sonno") || modulo("ossigeno") ? b("+ Notte", () => vai("registra", { tipo: "notte", data: oggi() })) : null,
     modulo("peso") ? b("+ Peso", () => vai("registra", { tipo: "peso", data: oggi() })) : null);
 }
@@ -197,7 +204,7 @@ function cardUltimi() {
   return el("section", { class: "card" },
     el("div", { class: "card-testa" }, el("h2", {}, "Ultimi allenamenti"), ultimi.length ? el("button", { type: "button", class: "lnk", onclick: () => vai("allenamenti") }, "Vedi tutti") : null),
     ultimi.length ? el("div", { class: "elenco" }, ultimi.map(voceSessione))
-      : el("p", { class: "vuoto" }, "Nessun allenamento ancora. Importa un file dal tuo orologio o ciclocomputer, oppure registra una sessione di forza."));
+      : el("p", { class: "vuoto" }, "Nessun allenamento ancora. Registra una sessione o importa un file dal tuo orologio o ciclocomputer."));
 }
 
 /* ---------- Allenamenti ---------- */
@@ -214,6 +221,7 @@ registraVista("allenamenti", { vivo: true, render(main) {
   const settimane = [...new Set(righe.map((s) => lunediDi(s.data)))];
   metti(main, 
     testata({ titolo: "Allenamenti" }),
+    el("div", { class: "azioni" }, el("button", { type: "button", class: "btn", onclick: () => vai("registra", { tipo: "mano", data: oggi(), sezione: "allenamenti" }) }, "+ Aggiungi a mano")),
     tipi.length > 1 ? bottoni(["Tutti", ...tipi], "tipo", true) : null,
     sottotipi.length > 1 ? bottoni(["Tutte", ...sottotipi], "sottotipo", false) : null,
     el("section", { class: "card", style: "gap:0" }, righe.length

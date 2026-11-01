@@ -35,27 +35,37 @@ export const ESERCIZI = {
 };
 
 /* ---------- schede ---------- */
-// Forza: esercizi[{nome, recupero_s, serie:[{kg, rip}], nota}]
-// HIIT: esercizi[{nome}], lavoro_s, pausa_s, giri, recupero_giri_s
+// Forza: esercizi[{nome, recupero_s, unita?, serie:[{kg, rip}], nota}]; con unita "sec" le serie sono a tempo: {kg, sec}
+// HIIT: esercizi[{nome}] (quanti sono = esercizi per giro), lavoro_s, pausa_s, giri, recupero_giri_s
 // Cardio: tipo, sottotipo, durata_min | km, zona (1..5)
 export function nuovaScheda(tipo) {
   const base = { titolo: "", tipo, nota: "" };
   if (tipo === "Forza") return { ...base, titolo: "Forza", esercizi: [] };
-  if (tipo === "HIIT") return { ...base, titolo: "HIIT", esercizi: [], lavoro_s: 40, pausa_s: 20, giri: 3, recupero_giri_s: 90 };
+  if (tipo === "HIIT") return { ...base, titolo: "HIIT", esercizi: [{ nome: "" }, { nome: "" }, { nome: "" }, { nome: "" }], lavoro_s: 40, pausa_s: 20, giri: 3, recupero_giri_s: 90 };
   return { ...base, titolo: tipo, sottotipo: null, durata_min: 45, km: null, zona: 2 };
 }
-// Serie in breve: "4 × 10 · 60 kg" se sono tutte uguali, altrimenti "60×10 · 62,5×8 · 65×6".
+// Serie in breve: "4 × 10 · 60 kg" se sono tutte uguali, altrimenti "60×10 · 62,5×8 · 65×6"; a tempo "3 × 45"".
 const kgTesto = (kg) => String(kg).replace(".", ",");
-export const tutteUguali = (serie = []) => serie.length > 0 && serie.every((s) => (s.kg ?? null) === (serie[0].kg ?? null) && (s.rip ?? null) === (serie[0].rip ?? null));
-export function riassuntoSerie(serie = []) {
+const quanto = (s, unita) => (unita === "sec" ? `${s.sec ?? "—"}"` : `${s.rip ?? "—"}`);
+export const tutteUguali = (serie = []) => serie.length > 0 && serie.every((s) => ["kg", "rip", "sec"].every((k) => (s[k] ?? null) === (serie[0][k] ?? null)));
+export function riassuntoSerie(serie = [], unita) {
   if (!serie.length) return "";
-  if (tutteUguali(serie)) return `${serie.length} × ${serie[0].rip ?? "—"}` + (serie[0].kg ? ` · ${kgTesto(serie[0].kg)} kg` : "");
-  return serie.map((s) => (s.kg ? `${kgTesto(s.kg)}×${s.rip ?? "—"}` : `${s.rip ?? "—"}`)).join(" · ");
+  if (tutteUguali(serie)) return `${serie.length} × ${quanto(serie[0], unita)}` + (serie[0].kg ? ` · ${kgTesto(serie[0].kg)} kg` : "");
+  return serie.map((s) => (s.kg ? `${kgTesto(s.kg)}×${quanto(s, unita)}` : quanto(s, unita))).join(" · ");
 }
-// Durata stimata di una scheda di forza: circa 40" per serie più il recupero (90" se non indicato).
-export const durataForza = (s) => Math.round((s.esercizi ?? []).reduce((a, e) => a + (e.serie?.length ?? 0) * (40 + (e.recupero_s ?? 90)), 0) / 60);
+// Una serie da sola, negli elenchi delle sessioni: "60×10", "10 rip", "45"", "10×45"".
+export const testoSerie = (s, unita) => (s.kg ? `${kgTesto(s.kg)}×${quanto(s, unita)}` : unita === "sec" ? quanto(s, unita) : `${quanto(s, unita)} rip`);
+// Durata stimata di una scheda di forza: circa 40" per serie (o i secondi della serie a tempo) più il recupero
+// (90" se non indicato).
+export const durataForza = (s) => Math.round((s.esercizi ?? []).reduce((a, e) =>
+  a + (e.serie ?? []).reduce((b, x) => b + (e.unita === "sec" ? x.sec ?? 40 : 40) + (e.recupero_s ?? 90), 0), 0) / 60);
 
-export const durataHiit = (s) => Math.round(((s.lavoro_s + s.pausa_s) * (s.esercizi?.length ?? 0) * s.giri + s.recupero_giri_s * Math.max(0, s.giri - 1)) / 60);
+// Durata dell'HIIT: in ogni giro lavoro per ogni esercizio e pausa tra uno e l'altro; tra i giri il recupero, che
+// sostituisce la pausa dopo l'ultimo esercizio.
+export const durataHiit = (s) => {
+  const n = s.esercizi?.length ?? 0, giri = s.giri ?? 0;
+  return n && giri ? Math.round((giri * (n * (s.lavoro_s ?? 0) + (n - 1) * (s.pausa_s ?? 0)) + (giri - 1) * (s.recupero_giri_s ?? 0)) / 60) : 0;
+};
 
 // Schede di esempio per chi parte da un modello: si possono cambiare o cancellare.
 export const SCHEDE_ESEMPIO = {
@@ -63,7 +73,7 @@ export const SCHEDE_ESEMPIO = {
     { nome: "Squat con bilanciere", recupero_s: 120, serie: serieUguali(3, 8) },
     { nome: "Panca piana", recupero_s: 120, serie: serieUguali(3, 8) },
     { nome: "Rematore con bilanciere", recupero_s: 90, serie: serieUguali(3, 10) },
-    { nome: "Plank", recupero_s: 60, serie: serieUguali(3, 1), nota: "30-45 secondi" },
+    { nome: "Plank", recupero_s: 60, unita: "sec", serie: Array.from({ length: 3 }, () => ({ kg: null, sec: 40 })) },
   ] },
   "forza-b": { titolo: "Forza B · Corpo intero", tipo: "Forza", nota: "", esercizi: [
     { nome: "Stacco rumeno", recupero_s: 120, serie: serieUguali(3, 8) },
@@ -125,13 +135,17 @@ export function ultimaVolta(sessioni, nome, primaDi) {
   const prec = sessioni.filter((s) => s.tipo === "Forza" && s.data < primaDi && s.esercizi?.some((e) => e.nome === nome))
     .sort((a, b) => b.data.localeCompare(a.data))[0];
   if (!prec) return null;
-  return { data: prec.data, serie: prec.esercizi.find((e) => e.nome === nome).serie ?? [] };
+  const e = prec.esercizi.find((x) => x.nome === nome);
+  return { data: prec.data, serie: e.serie ?? [], unita: e.unita ?? null };
 }
+// Unità della scheda (o dell'ultima volta, per un esercizio aggiunto al momento); le serie dell'ultima volta valgono
+// solo se erano nella stessa unità.
 export function precompilaEsercizio(esScheda, sessioni, data) {
   const u = ultimaVolta(sessioni, esScheda.nome, data);
-  const base = u?.serie?.length ? u.serie : esScheda.serie ?? [];
-  return { nome: esScheda.nome, recupero_s: esScheda.recupero_s ?? null, nota: esScheda.nota ?? "", ultima: u,
-    serie: base.map((s) => ({ kg: s.kg ?? null, rip: s.rip ?? null, fatta: false })) };
+  const unita = esScheda.unita ?? u?.unita ?? null;
+  const base = u?.serie?.length && u.unita === unita ? u.serie : esScheda.serie ?? [];
+  return { nome: esScheda.nome, recupero_s: esScheda.recupero_s ?? null, nota: esScheda.nota ?? "", unita, ultima: u,
+    serie: base.map((s) => ({ kg: s.kg ?? null, ...(unita === "sec" ? { sec: s.sec ?? null } : { rip: s.rip ?? null }), fatta: false })) };
 }
 
 /* ---------- recupero ---------- */

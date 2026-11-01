@@ -3,6 +3,7 @@ import { stato, limiti, ZONE, intervalloZona, coloreTipo, nomeTipo, attive, vai 
 import { SOTTOTIPI_BICI, volume, massimale, trovaVuoti } from "./analisi-file.js";
 import { $, el, metti, icona, ICONE, fmtData, fmtDataLunga, fmtNum, fmtDur, fmtOre, fmtPasso, fmtKg, numero, avviso, esito, conConferma, somma, campo } from "./util.js";
 import { COLORE_ZONA, graficoTraccia, graficoCurva, graficoTempo } from "./grafici.js";
+import { testoSerie } from "./dati.js";
 
 export const zoneDi = (s) => [s.z1_min, s.z2_min, s.z3_min, s.z4_min, s.z5_min];
 export const haZone = (s) => zoneDi(s).some((z) => z != null);
@@ -17,6 +18,7 @@ export function metriche(s) {
   if (s.tipo === "Bici" && s.vel_media) p.push(fmtNum(s.vel_media, 1) + " km/h");
   if (conPasso(s.tipo) && s.km > 0 && s.durata_min) p.push(fmtPasso(s.km, s.durata_min) + " /km");
   if (s.fc_media != null) p.push(`FC ${s.fc_media}${s.fc_max != null ? "/" + s.fc_max : ""}`);
+  if (s.hiit) p.push(`${s.hiit.giri_fatti ?? s.hiit.giri} giri × ${s.hiit.esercizi?.length ?? 0} esercizi`);
   if (s.esercizi?.length) {
     p.push(`${s.esercizi.length} esercizi`);
     const v = volumeSessione(s);
@@ -91,10 +93,16 @@ export function apriDettaglio(id) {
       el("thead", {}, el("tr", {}, el("th", {}, "Esercizio"), el("th", {}, "Serie"), el("th", {}, "Volume"), el("th", {}, "Massimale stimato"))),
       el("tbody", {}, s.esercizi.map((e) => el("tr", {},
         el("td", {}, e.nome),
-        el("td", {}, (e.serie ?? []).map((x) => (x.kg ? `${fmtKg(x.kg)}×${x.rip ?? "—"}` : `${x.rip ?? "—"} rip`)).join(" · ") || "—"),
+        el("td", {}, (e.serie ?? []).map((x) => testoSerie(x, e.unita)).join(" · ") || "—"),
         el("td", {}, volume(e.serie) ? fmtNum(volume(e.serie)) + " kg" : "—"),
         el("td", {}, massimale(e.serie) ? fmtKg(massimale(e.serie)) + " kg" : "—")))))),
     el("p", { class: "sotto" }, "Massimale stimato con la formula di Epley, dalla serie migliore.")) : null;
+
+  // HIIT registrato col timer: tempi, giri fatti ed esercizi del giro.
+  const h = s.hiit;
+  const timer = h ? el("section", { class: "card" }, el("h2", {}, "Timer HIIT"),
+    el("p", { class: "num" }, `${h.giri_fatti ?? h.giri} giri su ${h.giri} · ${h.lavoro_s}" per esercizio · ${h.pausa_s}" di pausa · ${h.recupero_giri_s}" tra i giri`),
+    el("ol", { class: "foglio-scheda" }, (h.esercizi ?? []).map((nome, i) => el("li", {}, el("span", { class: "n" }, String(i + 1)), el("b", {}, nome))))) : null;
 
   // Modifica
   const nome = el("input", { id: "d-nome", value: s.nome ?? "", placeholder: nomeTipo(s.tipo, s.sottotipo) });
@@ -132,7 +140,7 @@ export function apriDettaglio(id) {
     el("div", { class: "foglio-testa" },
       el("div", {}, el("h2", { id: "d-titolo" }, s.nome || nomeTipo(s.tipo, s.sottotipo)), el("p", {}, `${fmtDataLunga(s.data)} · ${nomeTipo(s.tipo, s.sottotipo)}`)),
       el("button", { class: "tondo chiudi", type: "button", "aria-label": "Chiudi", onclick: chiudi }, icona(ICONE.chiudi))),
-    riquadri, pesanti, zoneBox, esercizi,
+    riquadri, pesanti, zoneBox, esercizi, timer,
     el("section", { class: "card modulo" }, el("h2", {}, "Modifica"),
       campo("Nome", nome),
       el("div", { class: "righe" }, campo("Tipo", tipo), campoSotto),
