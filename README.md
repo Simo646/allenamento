@@ -20,7 +20,8 @@ Allenamenti, schede, tracce GPS e misure restano solo sul tuo telefono, nella me
 e non li invia da nessuna parte. Anche i file FIT, GPX e TCX che importi si leggono sul telefono, senza caricarli.
 
 Come per ogni sito, chi lo ospita vede l'indirizzo IP di chi lo apre: GitHub per l'app e jsDelivr per il lettore dei
-file FIT, scaricato alla prima apertura. L'app Android, all'avvio, chiede a GitHub se c'è una versione nuova.
+file FIT, scaricato alla prima apertura. L'app Android, all'avvio, chiede a GitHub se c'è una versione nuova, e per la
+mappa sotto le tracce chiede a OpenTopoMap le tessere della zona del percorso (si può spegnere nelle Impostazioni).
 
 Per non perderli, ogni tanto apri **Impostazioni › I tuoi dati › Esporta un backup** e salva il file in un posto
 privato (Drive, iCloud, Dropbox): contiene anche le tracce GPS, che mostrano da dove parti.

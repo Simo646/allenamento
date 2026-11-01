@@ -122,3 +122,10 @@ export const ricorda = {
   scrivi(k, v) { try { v == null ? localStorage.removeItem("allenamento." + k) : localStorage.setItem("allenamento." + k, JSON.stringify(v)); } catch { /* niente */ } },
   svuota() { try { for (const k of Object.keys(localStorage)) if (k.startsWith("allenamento.")) localStorage.removeItem(k); } catch { /* niente */ } },
 };
+
+// Tema chiaro (predefinito) o scuro, scelto nelle Impostazioni e ricordato su questo dispositivo.
+export const temaScuro = () => ricorda.leggi("tema") === "scuro";
+export function applicaTema(scuro = temaScuro()) {
+  ricorda.scrivi("tema", scuro ? "scuro" : null);
+  document.documentElement.dataset.tema = scuro ? "scuro" : "chiaro";
+}

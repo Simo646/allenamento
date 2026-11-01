@@ -4,6 +4,7 @@ import { SOTTOTIPI_BICI, volume, massimale, trovaVuoti } from "./analisi-file.js
 import { $, el, metti, icona, ICONE, fmtData, fmtDataLunga, fmtNum, fmtDur, fmtOre, fmtPasso, fmtKg, numero, avviso, esito, conConferma, somma, campo } from "./util.js";
 import { COLORE_ZONA, graficoTraccia, graficoCurva, graficoTempo } from "./grafici.js";
 import { testoSerie } from "./dati.js";
+import { leggiMappa, scaricaMappa, eliminaMappa, mappeAttive } from "./mappe.js";
 
 export const zoneDi = (s) => [s.z1_min, s.z2_min, s.z3_min, s.z4_min, s.z5_min];
 export const haZone = (s) => zoneDi(s).some((z) => z != null);
@@ -130,6 +131,7 @@ export function apriDettaglio(id) {
     try {
       await stato.archivio.elimina("sessioni", s.id);
       await stato.archivio.elimina("dettagli", s.id);
+      await eliminaMappa(s.id);
       chiudi();
       avviso("Allenamento eliminato");
     } catch (e) { esito(esitoD, "Non eliminato: " + (e?.message ?? "errore"), "err"); }
@@ -163,8 +165,14 @@ async function caricaPesanti(s, box, lim) {
   const grafici = [];
   if (d.traccia?.lat?.length > 1) {
     const g = el("div");
-    pezzi.push(el("section", { class: "card" }, el("h2", {}, "Traccia"), el("p", { class: "sotto" }, "Ogni tratto ha il colore della zona del battito. Tocca la traccia per tempo e battito."), g));
-    grafici.push(() => graficoTraccia(g, d.traccia, d.curva_fc, lim));
+    const nota = el("p", { class: "sotto" }, "Ogni tratto ha il colore della zona del battito. Tocca la traccia per tempo e battito.");
+    pezzi.push(el("section", { class: "card" }, el("h2", {}, "Traccia"), nota, g));
+    const mappa = await leggiMappa(s.id);
+    grafici.push(() => graficoTraccia(g, d.traccia, d.curva_fc, lim, mappa));
+    // Mappa che manca (allenamento salvato senza rete, o tornato da un backup): la scarico e ridisegno.
+    if (!mappa && mappeAttive()) scaricaMappa(s.id, d.traccia)
+      .then(async (ok) => { const m = ok && g.isConnected ? await leggiMappa(s.id) : null; if (m) graficoTraccia(g, d.traccia, d.curva_fc, lim, m); })
+      .catch(() => { if (nota.isConnected) nota.textContent += " La mappa non si è scaricata: riprova con la rete aprendo di nuovo l'allenamento."; });
   }
   // Soste (dispositivo in pausa, nessun dato) e tratti senza fascia, per segnarli sui grafici.
   const vuoti = d.curva_fc ? trovaVuoti(d.curva_fc, { traccia: d.traccia, curve: d.curve }) : [];

@@ -1,6 +1,6 @@
 /* Stile "ciclocomputer": bianco e nero ad alto contrasto come lo schermo di un ciclocomputer, linee spesse che dividono
    i campi dati, numeri grandi in carattere stretto, etichette maiuscole spaziate, striscia a LED in cima colorata con la
-   zona del giorno. Solo tema chiaro: resta chiaro anche se il telefono è in modalità scura. */
+   zona del giorno. Tema chiaro di base; quello scuro si sceglie nelle Impostazioni (data-tema="scuro" su <html>). */
 :root{
   color-scheme:light;
   --bg:#fbfbf8; --surface:#fbfbf8; --surface-2:#eef0ec;
@@ -11,7 +11,7 @@
   --t-forza:#c99a00; --t-hiit:#c8429a; --t-corsa:#2b8a3e; --t-camminata:#0e93a0; --t-trekking:#a0581f; --t-bici:#6c4ce0; --t-altro:#8a939c;
   --z1:#9aa1a9; --z2:#2f80d1; --z3:#2e9e4f; --z4:#f08c1a; --z5:#d93025;
   --z1-ink:#0a0a0a; --z2-ink:#ffffff; --z3-ink:#ffffff; --z4-ink:#0a0a0a; --z5-ink:#ffffff;
-  --serie:#2c3e57; --sonno:#2563c9; --o2-max:#ee9a90; --o2-media:#dc4b43; --o2-min:#9e1f1a; --band-alpha:.15;
+  --serie:#2c3e57; --sonno:#2563c9; --o2-max:#ee9a90; --o2-media:#dc4b43; --o2-min:#9e1f1a; --band-alpha:.28;
   --tratteggio:repeating-linear-gradient(45deg,var(--faint) 0 1.5px,var(--surface-2) 1.5px 4.5px);
   --velo:rgba(10,10,10,.5);
   --font-ui:"Barlow Semi Condensed","Arial Narrow",system-ui,sans-serif;
@@ -20,6 +20,19 @@
   --tratto:2px solid var(--ink);
   --r:8px; --r-s:6px;
 }
+/* Tema scuro: fondo nero e testo chiaro, come un ciclocomputer di notte. Zone e colori dei tipi restano gli stessi. */
+:root[data-tema="scuro"]{
+  color-scheme:dark;
+  --bg:#0e0f10; --surface:#0e0f10; --surface-2:#1e2124;
+  --ink:#f1f2ee; --muted:#b3b9bf; --faint:#80878e; --line:#383d42; --line-2:#80878e;
+  --barra-bg:#000000; --barra-ink:#ffffff; --barra-muted:#a9b0b8;
+  --accent:#f1f2ee; --accent-ink:#0e0f10; --accent-text:#f1f2ee; --accent-soft:#1e2124;
+  --ok:#5fc46a; --ok-bg:#132a17; --warn:#e8b64c; --warn-bg:#33270b; --crit:#ff6a5f; --crit-text:#ff8a80; --crit-bg:#3a1513;
+  --t-bici:#8c72ff; --t-trekking:#c9773a;
+  --serie:#9fbbe0; --sonno:#6f9ff0; --band-alpha:.34;
+  --velo:rgba(0,0,0,.65);
+}
+:root[data-tema="scuro"] .grafico image{filter:brightness(.82)}
 
 *{box-sizing:border-box}
 [hidden]{display:none!important}
@@ -43,6 +56,7 @@ p{margin:0}
 .testata{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--bg);display:grid}
 .led{display:flex;justify-content:center;gap:6px;padding:9px 0 8px;background:var(--barra-bg);box-shadow:0 0 0 100vmax var(--barra-bg);clip-path:inset(0 -100vmax)}
 .led i{display:block;width:28px;height:6px;border-radius:3px;background:var(--led,var(--faint))}
+.led.vivo i{box-shadow:0 0 8px 1px var(--led)}
 .testata-riga{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:58px;padding:6px 0;border-bottom:var(--tratto)}
 .testata .data{font-family:var(--font-ui);font-weight:600;font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .testata h1{font-family:var(--font-ui);font-weight:700;font-size:26px;line-height:1.05;letter-spacing:.04em;text-transform:uppercase}
@@ -258,9 +272,15 @@ main{display:grid;gap:14px;align-content:start;padding-bottom:14px}
 .campo input:not([type=checkbox]):not([type=radio]),.campo select,.campo textarea,.input{width:100%;min-width:0;min-height:44px;padding:9px 11px;border:var(--tratto);border-radius:var(--r-s);background:var(--bg);font-size:16px}
 .campo textarea{min-height:76px;resize:vertical}
 .campo small{color:var(--muted);font-size:12px}
-.seg{display:inline-flex;flex-wrap:wrap;border:var(--tratto);border-radius:var(--r-s);overflow:hidden;justify-self:start;max-width:100%}
+.seg{display:inline-flex;flex-wrap:wrap;gap:2px;background:var(--ink);border:var(--tratto);border-radius:var(--r-s);overflow:hidden;justify-self:start;max-width:100%}
 .seg button,.seg label span{display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:6px 14px;border:0;background:var(--bg);color:var(--ink);font-family:var(--font-ui);font-weight:600;font-size:14px;letter-spacing:.08em;text-transform:uppercase}
-.seg button+button,.seg label+label span{border-left:var(--tratto)}
+.seg>button,.seg>label{flex:1 0 auto}
+.seg label span{flex:1;justify-content:center}
+/* Le attività in tre colonne: righe ordinate anche quando non stanno su una */
+.seg.tipi{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));justify-self:stretch}
+.seg.tipi>:last-child:nth-child(3n+1){grid-column:span 3}
+.seg.tipi>:last-child:nth-child(3n+2){grid-column:span 2}
+.seg.tipi label span{padding:6px 4px}
 .seg button[aria-pressed="true"],.seg input:checked+span{background:var(--ink);color:var(--bg)}
 .seg label{position:relative;display:inline-flex}
 .seg input{position:absolute;opacity:0;pointer-events:none}
@@ -357,3 +377,5 @@ body.con-barra .schede-nav{display:none}
 
 .avviso{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(68px + env(safe-area-inset-bottom,0px));z-index:50;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:6px;font-family:var(--font-ui);font-weight:700;font-size:15px;letter-spacing:.06em;text-transform:uppercase;max-width:calc(100% - 32px)}
 @media (prefers-reduced-motion:no-preference){.foglio{animation:sale .18s ease-out}@keyframes sale{from{transform:translateY(16px);opacity:.6}}}
+.attribuzione{margin:6px 0 0;font-size:11px;color:var(--muted)}
+.attribuzione a{color:var(--muted)}

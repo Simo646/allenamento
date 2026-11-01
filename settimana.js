@@ -38,7 +38,7 @@ registraVista("voce", { vivo: false, render(main, { giorno, id, preset }) {
   const torna = () => vai("settimana");
 
   const selGiorno = el("select", { id: "v-giorno" }, GIORNI.map((g) => el("option", { value: g, selected: g === giorno }, NOMI_GIORNI[g])));
-  const tipi = el("div", { class: "seg", role: "radiogroup", "aria-label": "Tipo" });
+  const tipi = el("div", { class: "seg tipi", role: "radiogroup", "aria-label": "Tipo" });
   const sotto = el("div", { class: "seg", role: "radiogroup", "aria-label": "Bici" });
   const selScheda = el("select", { id: "v-scheda" });
   const durata = el("input", { id: "v-durata", inputmode: "numeric", value: v.durata_min ?? "", placeholder: "dalla scheda" });

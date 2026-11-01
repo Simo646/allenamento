@@ -199,23 +199,36 @@ export function graficoIntervalli(contenitore, { punti, titoloTip }) {
   legenda(contenitore, [["var(--o2-min)", "Minima"], ["var(--o2-media)", "Media"], ["var(--o2-max)", "Dalla minima alla massima"]]);
 }
 
-// Traccia GPS colorata con la zona del battito di ogni tratto, su fondo neutro. Le mappe topografiche non si
-// possono caricare dentro un artifact (le immagini da altri siti sono bloccate).
-export function graficoTraccia(contenitore, traccia, curva, lim) {
+// Traccia GPS colorata con la zona del battito di ogni tratto, sopra la mappa topografica quando c'è (mappe.js:
+// {url, z, x0, y0, w, h}, stessa proiezione Web Mercator, quindi allineata). Senza mappa, su fondo neutro.
+export function graficoTraccia(contenitore, traccia, curva, lim, mappa = null) {
   const { t, lat, lon } = traccia;
-  const g = pianoGrafico(contenitore, { H: (W) => Math.round(Math.min(W * 0.75, 420)), m: { t: 0, r: 0, b: 0, l: 0 } });
-  const z = 18;
+  const g = pianoGrafico(contenitore, { H: (W) => Math.round(mappa ? W * (mappa.h / mappa.w) : Math.min(W * 0.75, 420)), m: { t: 0, r: 0, b: 0, l: 0 } });
+  const z = mappa?.z ?? 18;
   const P = lat.map((la, i) => mondo(la, lon[i], z));
-  const xs = P.map((p) => p.x), ys = P.map((p) => p.y), bordo = 24;
-  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
-  const k = Math.min((g.W - 2 * bordo) / Math.max(maxX - minX, 1), (g.H - 2 * bordo) / Math.max(maxY - minY, 1));
-  const x0 = (minX + maxX) / 2 - g.W / 2 / k, y0 = (minY + maxY) / 2 - g.H / 2 / k;
+  let k, x0, y0;
+  if (mappa) {
+    k = g.W / mappa.w;
+    x0 = mappa.x0;
+    y0 = mappa.y0;
+  } else {
+    const xs = P.map((p) => p.x), ys = P.map((p) => p.y), bordo = 24;
+    const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+    k = Math.min((g.W - 2 * bordo) / Math.max(maxX - minX, 1), (g.H - 2 * bordo) / Math.max(maxY - minY, 1));
+    x0 = (minX + maxX) / 2 - g.W / 2 / k;
+    y0 = (minY + maxY) / 2 - g.H / 2 / k;
+  }
   const px = (i) => (P[i].x - x0) * k, py = (i) => (P[i].y - y0) * k;
   const fcA = (i) => (curva?.fc?.length ? curva.fc[Math.min(curva.fc.length - 1, Math.floor(t[i] / curva.passo_s))] ?? null : null);
   const zonaA = (i) => { const v = fcA(i); return v == null ? -1 : zonaDi(v, lim) - 1; };
   const punti = (da, a) => Array.from({ length: a - da + 1 }, (_, j) => `${px(da + j).toFixed(1)},${py(da + j).toFixed(1)}`).join(" ");
 
-  g.add(sv("rect", { width: g.W, height: g.H, rx: 12, fill: "var(--surface-2)" }));
+  const idClip = "bordo-" + Math.random().toString(36).slice(2, 8);
+  const defs = sv("defs"), clip = sv("clipPath", { id: idClip });
+  clip.append(sv("rect", { width: g.W, height: g.H, rx: 12 }));
+  defs.append(clip);
+  g.add(defs, sv("rect", { width: g.W, height: g.H, rx: 12, fill: "var(--surface-2)" }));
+  if (mappa) g.add(sv("image", { href: mappa.url, x: 0, y: 0, width: g.W, height: g.H, preserveAspectRatio: "none", "clip-path": `url(#${idClip})` }));
   g.add(sv("polyline", { points: punti(0, t.length - 1), fill: "none", stroke: "var(--surface)", "stroke-width": "8", "stroke-linecap": "round", "stroke-linejoin": "round" }));
   for (let da = 0, i = 1; i <= t.length; i++) {
     if (i < t.length && zonaA(i) === zonaA(da)) continue;
@@ -226,13 +239,15 @@ export function graficoTraccia(contenitore, traccia, curva, lim) {
   const fine = t.length - 1;
   g.add(sv("rect", { x: px(fine) - 6, y: py(fine) - 6, width: 12, height: 12, rx: 2, fill: "var(--ink)", stroke: "var(--surface)", "stroke-width": "2" }),
     sv("circle", { cx: px(0), cy: py(0), r: 7, fill: "var(--surface)", stroke: "var(--ink)", "stroke-width": "3" }));
-  g.add(sv("path", { d: `M${g.W - 22},${30}l6,-16l6,16l-6,-4z`, fill: "var(--ink)" }),
-    sv("text", { x: g.W - 16, y: 43, "text-anchor": "middle", style: "fill:var(--ink);font-weight:800" }, "N"));
+  g.add(sv("rect", { x: g.W - 36, y: 8, width: 28, height: 40, rx: 4, fill: "var(--surface)", "fill-opacity": "0.9" }),
+    sv("path", { d: `M${g.W - 28},${30}l6,-16l6,16l-6,-4z`, fill: "var(--ink)" }),
+    sv("text", { x: g.W - 22, y: 43, "text-anchor": "middle", style: "fill:var(--ink);font-weight:800" }, "N"));
   const pxPerM = k / metriPerPixel(lat[Math.floor(lat.length / 2)], z);
   const metri = [50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000].find((d) => d * pxPerM >= 50) ?? 50000;
   const lx = metri * pxPerM, etichetta = metri >= 1000 ? `${metri / 1000} km` : `${metri} m`;
-  g.add(sv("path", { d: `M14,${g.H - 18}v5h${lx}v-5`, fill: "none", stroke: "var(--ink)", "stroke-width": "2" }),
-    sv("text", { x: 20 + lx, y: g.H - 12, style: "fill:var(--ink);font-weight:700" }, etichetta));
+  g.add(sv("rect", { x: 8, y: g.H - 30, width: lx + 64, height: 22, rx: 4, fill: "var(--surface)", "fill-opacity": "0.9" }),
+    sv("path", { d: `M16,${g.H - 20}v5h${lx}v-5`, fill: "none", stroke: "var(--ink)", "stroke-width": "2" }),
+    sv("text", { x: 22 + lx, y: g.H - 14, style: "fill:var(--ink);font-weight:700" }, etichetta));
 
   const punto = sv("circle", { r: 6, fill: "var(--ink)", stroke: "var(--surface)", "stroke-width": "2", visibility: "hidden" });
   g.add(punto);
@@ -253,6 +268,10 @@ export function graficoTraccia(contenitore, traccia, curva, lim) {
   const zonePresenti = [...new Set(t.map((_, i) => zonaA(i)))].sort();
   legenda(contenitore, [...zonePresenti.map((zz) => (zz < 0 ? ["var(--ink)", "Senza battito"] : [COLORE_ZONA[zz], ZONE[zz]])),
     ["var(--surface);border:3px solid var(--ink);border-radius:50%", "Partenza"], ["var(--ink)", "Arrivo"]]);
+  // Attribuzione chiesta dalla licenza della mappa.
+  if (mappa) contenitore.append(el("p", { class: "attribuzione" }, "Mappa: © ",
+    el("a", { href: "https://www.openstreetmap.org/copyright", target: "_blank", rel: "noopener" }, "OpenStreetMap"),
+    " contributors, SRTM · stile © ", el("a", { href: "https://opentopomap.org", target: "_blank", rel: "noopener" }, "OpenTopoMap"), " (CC-BY-SA)"));
 }
 
 // Asse del tempo in minuti, comune alle curve di una sessione.
@@ -285,7 +304,7 @@ const tipVuoto = (vuoti, sec, xPx, g) => {
 
 // Curva del battito di una sessione, sulle bande delle zone; `vuoti` da trovaVuoti() di analisi-file.js.
 export function graficoCurva(contenitore, curva, lim, vuoti = []) {
-  const g = pianoGrafico(contenitore, { H: 200, m: { t: 10, r: 28, b: 24, l: 36 } });
+  const g = pianoGrafico(contenitore, { H: (W) => Math.round(Math.min(Math.max(W * 0.72, 250), 360)), m: { t: 10, r: 30, b: 24, l: 36 } });
   const fc = curva.fc;
   const validi = fc.filter((v) => v != null);
   const lo = Math.min(Math.floor((Math.min(...validi) - 5) / 10) * 10, lim[0] - 10);
@@ -298,7 +317,8 @@ export function graficoCurva(contenitore, curva, lim, vuoti = []) {
     const a = Math.max(bordi[z], lo), b = Math.min(bordi[z + 1], hi);
     if (b > a) g.add(
       sv("rect", { x: g.m.l, y: y(b), width: g.iw, height: y(a) - y(b), fill: COLORE_ZONA[z], style: "fill-opacity:var(--band-alpha)" }),
-      sv("text", { x: g.W - g.m.r + 6, y: (y(a) + y(b)) / 2 + 4 }, ZONE[z]));
+      sv("line", { x1: g.m.l, x2: g.m.l + g.iw, y1: y(b), y2: y(b), stroke: COLORE_ZONA[z], "stroke-width": 1, "stroke-opacity": 0.7 }),
+      sv("text", { x: g.W - g.m.r + 6, y: (y(a) + y(b)) / 2 + 4, style: `fill:${COLORE_ZONA[z]};font-weight:700` }, ZONE[z]));
   }
   disegnaVuoti(g, vuoti, x);
   asseY(g, tacche(lo, hi).filter((t) => t >= lo && t <= hi), y, String, { griglia: false });
@@ -309,7 +329,7 @@ export function graficoCurva(contenitore, curva, lim, vuoti = []) {
     if (fc[i0] != null && fc[i1] != null) g.add(sv("line", { x1: x((i0 + 0.5) * curva.passo_s), y1: y(fc[i0]), x2: x((i1 + 0.5) * curva.passo_s), y2: y(fc[i1]),
       stroke: "var(--faint)", "stroke-width": "1.5", "stroke-dasharray": "3 4" }));
   }
-  g.add(sv("path", { d: percorso(fc, curva.passo_s, x, y), fill: "none", stroke: "var(--ink)", "stroke-width": "2", "stroke-linejoin": "round", "stroke-linecap": "round" }));
+  g.add(sv("path", { d: percorso(fc, curva.passo_s, x, y), fill: "none", stroke: "var(--ink)", "stroke-width": "2.4", "stroke-linejoin": "round", "stroke-linecap": "round" }));
   const punto = sv("circle", { r: 4, fill: "var(--ink)", stroke: "var(--surface)", "stroke-width": "2", visibility: "hidden" });
   g.add(punto);
   sensibile(g, (px) => {

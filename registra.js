@@ -1,5 +1,5 @@
 // Registrare: sessione di forza serie per serie, file dei dispositivi (FIT, GPX, TCX), allenamento a mano, notte, peso.
-import { stato, registraVista, vai, rivai, testata, salvaGiorno, limiti, nomeTipo, coloreTipo, attive, modulo } from "./stato.js";
+import { stato, registraVista, vai, rivai, testata, salvaGiorno, limiti, nomeTipo, coloreTipo, attive, modulo, ledDalBattito } from "./stato.js";
 import { precompilaEsercizio, vociDelGiorno, ESERCIZI, testoSerie } from "./dati.js";
 import { riassumiFit, riassumiXml, idSessione, CAMPI_FILE, CAMPI_DETTAGLIO, TIPI, SOTTOTIPI_BICI, volume } from "./analisi-file.js";
 import { $, el, metti, icona, ICONE, oggi, fmtData, fmtGiorno, fmtNum, fmtKg, fmtSec, numero, avviso, esito, ricorda, conConferma, campo, opzione, testoKg } from "./util.js";
@@ -9,6 +9,7 @@ import { contenutoScheda, riassuntoScheda } from "./schede.js";
 import { Registratore } from "./registratore.js";
 import { disponibile, collegaFascia, schermoAcceso } from "./sorgenti.js";
 import { programmaSegnali, sbloccaAudio, suoniAttivi, impostaSuoni } from "./suoni.js";
+import { scaricaMappa, eliminaMappa } from "./mappe.js";
 
 const occupato = (id) => stato.sessioni.some((s) => s.id === id);
 
@@ -30,6 +31,7 @@ let timer = 0;
 // Fascia collegata durante la forza: resta collegata anche se la pagina si ridisegna o si cambia vista.
 let fasciaForza = null; // { rec: Registratore, fascia, stato }
 async function staccaFasciaForza() { const f = fasciaForza; fasciaForza = null; await f?.fascia?.scollega?.(); }
+const zonaForza = () => (fasciaForza ? fasciaForza.rec.zonaAttuale(Date.now(), limiti()) : null);
 // Bip a 3-2-1 prima della fine del recupero (uno alla volta: una nuova spunta lo sostituisce) e schermo acceso.
 let annullaBipRecupero = null, fermaSchermoForza = null, schermoInArrivo = false;
 function programmaRecupero(fine) {
@@ -47,6 +49,7 @@ export function iniziaForza({ scheda, avvio, fascia, collega }) {
     const f = { rec, fascia, stato: "connessa" };
     collega((m) => rec.battito(m), (st) => (f.stato = st));
     fasciaForza = f;
+    ledDalBattito(zonaForza);
   }
   ricorda.scrivi("bozza-forza", null);
   vai("registra", { tipo: "forza", scheda, data: oggi(), avvio });
@@ -102,6 +105,7 @@ function moduloForza(main, param) {
       const f = { rec, fascia: null, stato: "connessa" };
       f.fascia = await collegaFascia((m) => rec.battito(m), (s) => (f.stato = s));
       fasciaForza = f;
+      ledDalBattito(zonaForza);
       ridisegna();
     } catch (e) { esito(esitoFascia, e?.name === "NotFoundError" ? "Nessuna fascia scelta." : "Non collegata: " + (e?.message ?? "errore"), "err"); collega.disabled = false; }
   };
@@ -287,7 +291,8 @@ function moduloFile(main, param) {
 }
 // Salva un allenamento riassunto da un file o da una registrazione dal vivo: documento leggero in sessioni, traccia e
 // curve in dettagli. Un allenamento con lo stesso inizio, o inserito a mano quel giorno, viene aggiornato. `extra`:
-// altri campi da salvare (per esempio i tempi del timer HIIT).
+// altri campi da salvare (per esempio i tempi del timer HIIT). Con la traccia si scarica subito la mappa, se non si
+// chiede `mappa: false` (import di molti file insieme: le mappe arrivano aprendo gli allenamenti).
 export async function salvaRiassunto(r, param = {}, presi = new Set()) {
   const stessa = (r.inizio && stato.sessioni.find((s) => s.inizio && s.inizio === r.inizio))
     ?? stato.sessioni.find((s) => s.data === r.data && s.tipo === r.tipo && !s.inizio && !s.file);
@@ -301,6 +306,10 @@ export async function salvaRiassunto(r, param = {}, presi = new Set()) {
     : { data: r.data, tipo: r.tipo, sottotipo: r.sottotipo ?? null, nome: schedaVoce?.titolo ?? r.nome_file ?? "", nota: param.nota ?? "", scheda: idScheda, ...campi };
   await stato.archivio.scrivi("sessioni", id, doc);
   await stato.archivio.scrivi("dettagli", id, Object.fromEntries(CAMPI_DETTAGLIO.map((c) => [c, r[c] ?? null])));
+  if (r.traccia) {
+    if (stessa) await eliminaMappa(id); // la traccia può essere cambiata
+    if (param.mappa !== false) scaricaMappa(id, r.traccia).catch(() => { /* riprova aprendo l'allenamento */ });
+  }
   return id;
 }
 
@@ -370,7 +379,7 @@ function formFile(param) {
     const presi = new Set();
     let fatti = 0;
     try {
-      for (const { r } of attesa) { await salvaRiassunto(r, param, presi); fatti++; }
+      for (const { r } of attesa) { await salvaRiassunto(r, { ...param, mappa: attesa.length <= 5 }, presi); fatti++; }
       avviso(fatti === 1 ? "Allenamento salvato" : `${fatti} allenamenti salvati`);
       vai("oggi");
     } catch (e) {
@@ -396,7 +405,7 @@ function moduloMano(main, param) {
 // La forza ha la sua scheda serie per serie; gli altri tipi durata, distanza e battito.
 function formManuale(param) {
   const v = { tipo: param.voce?.tipo ?? (attive().find((t) => t !== "Forza") ?? "Corsa"), sottotipo: param.voce?.sottotipo ?? null };
-  const tipi = el("div", { class: "seg", role: "radiogroup", "aria-label": "Tipo" });
+  const tipi = el("div", { class: "seg tipi", role: "radiogroup", "aria-label": "Tipo" });
   const sotto = el("div", { class: "seg", role: "radiogroup", "aria-label": "Bici" });
   const campoSotto = el("fieldset", { class: "campo" }, el("legend", {}, "Bici"), sotto);
   const inp = (id, tipo = "text", extra = {}) => el("input", { id, type: tipo, inputmode: tipo === "text" ? "decimal" : undefined, ...extra });

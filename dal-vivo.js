@@ -3,7 +3,7 @@
 // in corso e il successivo, e segnali sonori a 3-2-1. Forza: si passa alla scheda serie per serie di registra.js, con la
 // fascia già collegata. La registrazione in corso si salva ogni 10 s in IndexedDB: se l'app si chiude, Oggi propone di
 // riprenderla o salvarla. GPS e fascia arrivano da sorgenti.js, i segnali da suoni.js.
-import { stato, registraVista, vai, testata, limiti, attive, nomeTipo } from "./stato.js";
+import { stato, registraVista, vai, testata, limiti, attive, nomeTipo, ledDalBattito } from "./stato.js";
 import { SOTTOTIPI_BICI } from "./analisi-file.js";
 import { CARDIO, statoVoci, vociDelGiorno } from "./dati.js";
 import { el, metti, oggi, fmtNum, fmtSec, fmtPasso, numero, avviso, esito, conConferma, ricorda, opzione, campo } from "./util.js";
@@ -127,8 +127,9 @@ function schermataPreparazione(main, param) {
   if (hiit) scelta.hiit ??= impostazioniDa(sc);
   s.rec = new Registratore({ tipo: scelta.tipo, sottotipo: scelta.sottotipo, conGps, autoPausa: conGps && scelta.autoPausa, scheda: scelta.scheda });
   const ridisegna = () => schermataPreparazione(main, param);
+  ledDalBattito(() => (s?.fascia && !s.rec?.avviata ? s.rec.zonaAttuale(Date.now(), limiti()) : null));
 
-  const tipi = el("div", { class: "seg", role: "radiogroup", "aria-label": "Attività" },
+  const tipi = el("div", { class: "seg tipi", role: "radiogroup", "aria-label": "Attività" },
     attive().map((t) => opzione("dv-tipo", t, t, scelta.tipo === t, () => { Object.assign(scelta, sceltaPer(t)); ridisegna(); })));
   const sotto = scelta.tipo === "Bici" ? el("div", { class: "seg", role: "radiogroup", "aria-label": "Bici" },
     ["Non indicata", ...SOTTOTIPI_BICI].map((t) => opzione("dv-sotto", t, t, (scelta.sottotipo ?? "Non indicata") === t, () => { scelta.sottotipo = t === "Non indicata" ? null : t; s.rec.sottotipo = scelta.sottotipo; }))) : null;

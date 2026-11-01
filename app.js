@@ -2,7 +2,7 @@
 import { stato, avvia, registraVista, vai, programmaRender, testata, coloreTipo, nomeTipo, iconaTipo, chipZona, modulo, descriviVoce, intervalloZona } from "./stato.js";
 import { GIORNI, vociDelGiorno, statoVoci, recupero } from "./dati.js";
 import { TIPI } from "./analisi-file.js";
-import { $, el, metti, icona, ICONE, oggi, piuGiorni, lunediDi, fmtData, fmtNum, fmtDur, fmtOre, somma, ricorda } from "./util.js";
+import { $, el, metti, icona, ICONE, oggi, piuGiorni, lunediDi, fmtData, fmtNum, fmtDur, fmtOre, somma, ricorda, applicaTema } from "./util.js";
 import { voceSessione, perData, metriche, apriDettaglio } from "./dettaglio.js";
 import { contenutoScheda } from "./schede.js";
 import "./settimana.js";
@@ -13,6 +13,8 @@ import { leggiBozza, riprendiInterrotta, scartaInterrotta, registrazioneInCorso 
 import { scartaForza } from "./registra.js";
 import { nativo } from "./sorgenti.js";
 import { conConferma } from "./util.js";
+
+applicaTema(); // il tema scelto nelle Impostazioni, prima di disegnare
 
 /* ---------- Oggi ---------- */
 const aperte = new Set(); // voci con la scheda aperta

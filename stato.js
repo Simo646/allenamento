@@ -108,11 +108,24 @@ export function testata({ titolo, sopra = fmtDataLunga(oggi()), indietro = null,
   return el("header", { class: "testata" }, led(), el("div", { class: "testata-riga" }, sinistra, ingranaggio));
 }
 
-// Striscia dei LED come sul ciclocomputer: colore della zona obiettivo di oggi, grigia per forza o riposo.
-function led() {
-  const zona = pronto() ? vociDelGiorno(stato.settimana, oggi()).map((v) => (v.tipo === "Forza" ? null : descriviVoce(v).zona)).find(Boolean) : null;
-  return el("div", { class: "led", "aria-hidden": "true", style: `--led:${zona ? `var(--z${zona})` : "var(--faint)"}` }, Array.from({ length: 9 }, () => el("i")));
+// Striscia dei LED come sul ciclocomputer: colore della zona obiettivo di oggi, grigia per forza o riposo. Con una
+// fascia collegata (preparazione di una sessione, forza in corso) si accende col colore della zona del battito.
+let zonaBattito = null; // funzione che dà la zona del battito attuale (1-5), o null
+export function ledDalBattito(f) { zonaBattito = f; aggiornaLed(); }
+function statoLed() {
+  const viva = zonaBattito?.() ?? null;
+  const zona = viva ?? (pronto() ? vociDelGiorno(stato.settimana, oggi()).map((v) => (v.tipo === "Forza" ? null : descriviVoce(v).zona)).find(Boolean) : null);
+  return { colore: zona ? `var(--z${zona})` : "var(--faint)", viva: !!viva };
 }
+function led() {
+  const { colore, viva } = statoLed();
+  return el("div", { class: "led" + (viva ? " vivo" : ""), "aria-hidden": "true", style: `--led:${colore}` }, Array.from({ length: 9 }, () => el("i")));
+}
+function aggiornaLed() {
+  const { colore, viva } = statoLed();
+  for (const l of document.querySelectorAll(".testata .led")) { l.style.setProperty("--led", colore); l.classList.toggle("vivo", viva); }
+}
+setInterval(() => { if (zonaBattito) aggiornaLed(); }, 1000);
 
 export const limiti = () => stato.profilo.zone ?? calcolaZone({ eta: etaDa(stato.profilo.anno_nascita) ?? 35 }).limiti;
 export const ZONE = ["Z1", "Z2", "Z3", "Z4", "Z5"];

@@ -1,10 +1,12 @@
-// Primo avvio guidato, impostazioni (profilo, zone, attività, moduli) e dati (backup, ripristino, cancellazione).
+// Primo avvio guidato, impostazioni (profilo, zone, attività, moduli, aspetto e mappe) e dati (backup, ripristino,
+// cancellazione).
 import { stato, registraVista, vai, rivai, testata, salvaProfilo, salvaSettimana, ZONE, coloreTipo, limiti } from "./stato.js";
 import { PROFILO_PREDEFINITO, MODELLI_SETTIMANA, settimanaDaModello, etaDa, creaBackup, validaBackup, COLLEZIONI, GIORNI } from "./dati.js";
 import { calcolaZone, fcMaxDaEta, zoneDaCurva, validaLimiti, TIPI } from "./analisi-file.js";
-import { el, metti, oggi, numero, avviso, esito, conConferma, campo, ricorda } from "./util.js";
+import { el, metti, oggi, numero, avviso, esito, conConferma, campo, ricorda, applicaTema, temaScuro } from "./util.js";
 import { nativo, condividiFile } from "./sorgenti.js";
 import { scartaInterrotta } from "./dal-vivo.js";
+import { mappePossibili, mappeAttive, impostaMappe, eliminaTutteLeMappe } from "./mappe.js";
 
 const ANNO = new Date().getFullYear();
 const numInput = (id, valore, ph, onv) => el("input", { id, inputmode: "numeric", value: valore ?? "", placeholder: ph ?? "", oninput: (e) => onv(numero(e.target.value)) });
@@ -213,8 +215,24 @@ registraVista("impostazioni", { vivo: false, render(main) {
     el("section", { class: "card modulo" }, el("h2", {}, "Attività"), sceltaAttivita(p, salvaSubito)),
     el("section", { class: "card modulo" }, el("h2", {}, "Moduli facoltativi"),
       interruttoriModuli(p, () => { recuperoBox.hidden = !p.moduli.sonno; salvaSubito(); }), recuperoBox),
+    cardAspetto(),
     cardDati());
 } });
+
+/* ---------- aspetto e mappe: valgono per questo telefono, si applicano subito ---------- */
+function cardAspetto() {
+  const voce = (id, titolo, testo, acceso, cambia) => el("label", { class: "interruttore" },
+    el("span", {}, el("b", {}, titolo), el("small", {}, testo)),
+    el("input", { type: "checkbox", id, role: "switch", checked: acceso, onchange: (e) => cambia(e.target.checked) }));
+  const cancellaMappe = conConferma(el("button", { type: "button", class: "lnk", style: "justify-self:start" }, "Cancella le mappe salvate"), "Tocca di nuovo",
+    async () => { await eliminaTutteLeMappe(); avviso("Mappe cancellate"); });
+  return el("section", { class: "card modulo" }, el("h2", {}, "Aspetto e mappe"),
+    el("div", {},
+      voce("i-tema", "Tema scuro", "Fondo nero e testo chiaro, come un ciclocomputer di notte.", temaScuro(), (si) => applicaTema(si)),
+      mappePossibili() ? voce("i-mappe", "Mappa sotto le tracce", "Salvando un'uscita col GPS scarica la mappa topografica della zona da OpenTopoMap.", mappeAttive(), (si) => impostaMappe(si)) : null),
+    mappePossibili() ? el("p", { class: "sotto" }, "Per la mappa OpenTopoMap riceve solo la zona del percorso (e l'indirizzo IP, come ogni sito), non i tuoi allenamenti. Le mappe restano su questo telefono e non vanno nel backup.") : null,
+    mappePossibili() ? cancellaMappe : null);
+}
 
 /* ---------- dati: backup, ripristino, cancellazione ---------- */
 // Scelta del file e pulsante di importazione; `dopo` si chiama a importazione finita (dal primo avvio: vai a Oggi).
@@ -302,8 +320,10 @@ function cardDati() {
       for (const c of [...COLLEZIONI, "config"]) for (const d of await stato.archivio.elenco(c)) await stato.archivio.elimina(c, d.id);
       // Anche ciò che resta solo su questo dispositivo: registrazione interrotta, bozza della forza, preferenze.
       await scartaInterrotta();
+      await eliminaTutteLeMappe();
       stato.interrotta = null;
       ricorda.svuota();
+      applicaTema();
       avviso("Dati cancellati");
       vai("avvio");
     } catch (e) { esito(esitoD, "Cancellazione interrotta: " + (e?.message ?? "errore"), "err"); }
