@@ -269,6 +269,7 @@ function bloccoImporta(esitoD, dopo) {
 function cardDati() {
   const modo = stato.archivio?.modo;
   const testoModo = modo === "account" ? "I tuoi dati sono salvati nel tuo account claude.ai: li vedi solo tu, dal telefono e dal computer."
+    : modo === "browser" && nativo() ? "I tuoi dati sono salvati in questa app, su questo telefono. Se disinstalli l'app li perdi: fai un backup ogni tanto."
     : modo === "browser" ? "I tuoi dati sono salvati in questo browser, su questo dispositivo. Se cancelli i dati del sito li perdi: fai un backup ogni tanto."
     : "Questo browser non permette di salvare (forse è una finestra privata): quello che inserisci si perde alla chiusura. Esporta un backup prima di uscire.";
   const esitoD = el("p", { class: "esito", role: "status" });

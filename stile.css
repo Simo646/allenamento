@@ -89,7 +89,7 @@ main{display:grid;gap:14px;align-content:start;padding-bottom:14px}
 .banda{display:flex;gap:10px;align-items:flex-start;padding:10px 14px;border:var(--tratto);border-radius:var(--r);font-size:13px;font-weight:600}
 
 /* Pulsanti */
-.btn{min-height:44px;padding:8px 16px;border:var(--tratto);border-radius:var(--r-s);background:var(--bg);color:var(--ink);font-family:var(--font-ui);font-weight:700;font-size:15px;letter-spacing:.06em;text-transform:uppercase;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
+.btn{min-height:44px;padding:8px 16px;border:var(--tratto);border-radius:var(--r-s);background:var(--bg);color:var(--ink);font-family:var(--font-ui);font-weight:700;font-size:15px;letter-spacing:.06em;text-transform:uppercase;display:inline-flex;align-items:center;justify-content:center;gap:6px;max-width:100%;text-align:center}
 .btn.primario{background:var(--ink);color:var(--bg)}
 .btn.pericolo{color:var(--crit-text);border-color:var(--crit-text);background:none}
 .btn.tratteggio{border-style:dashed}
@@ -272,7 +272,7 @@ main{display:grid;gap:14px;align-content:start;padding-bottom:14px}
 .campo input:not([type=checkbox]):not([type=radio]),.campo select,.campo textarea,.input{width:100%;min-width:0;min-height:44px;padding:9px 11px;border:var(--tratto);border-radius:var(--r-s);background:var(--bg);font-size:16px}
 .campo textarea{min-height:76px;resize:vertical}
 .campo small{color:var(--muted);font-size:12px}
-.seg{display:inline-flex;flex-wrap:wrap;gap:2px;background:var(--ink);border:var(--tratto);border-radius:var(--r-s);overflow:hidden;justify-self:start;max-width:100%}
+.seg{display:inline-flex;flex-wrap:wrap;gap:2px;background:var(--line-2);border:var(--tratto);border-radius:var(--r-s);overflow:hidden;justify-self:start;max-width:100%}
 .seg button,.seg label span{display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:6px 14px;border:0;background:var(--bg);color:var(--ink);font-family:var(--font-ui);font-weight:600;font-size:14px;letter-spacing:.08em;text-transform:uppercase}
 .seg>button,.seg>label{flex:1 0 auto}
 .seg label span{flex:1;justify-content:center}

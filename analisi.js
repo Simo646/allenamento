@@ -114,7 +114,7 @@ registraVista("analisi", { vivo: true, render(main) {
       el("thead", {}, el("tr", {}, el("th", {}, "Giorno"), el("th", {}, "Serie"), el("th", {}, "Volume"), el("th", {}, "Massimale"))),
       el("tbody", {}, [...storia].reverse().slice(0, 6).map(({ s, e }) => el("tr", {},
         el("td", {}, fmtGiorno(s.data)),
-        el("td", {}, (e.serie ?? []).map((x) => testoSerie(x, e.unita)).join(" · ")),
+        el("td", { style: "white-space:normal" }, (e.serie ?? []).map((x) => testoSerie(x, e.unita)).join(" · ")),
         el("td", {}, volume(e.serie) ? `${fmtNum(volume(e.serie))} kg` : "—"),
         el("td", {}, massimale(e.serie) ? `${fmtKg(massimale(e.serie))} kg` : "—"))))));
     const conKg = storia.filter(({ e }) => massimale(e.serie));

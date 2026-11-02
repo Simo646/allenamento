@@ -108,7 +108,7 @@ export function apriDettaglio(id) {
       el("thead", {}, el("tr", {}, el("th", {}, "Esercizio"), el("th", {}, "Serie"), el("th", {}, "Volume"), el("th", {}, "Massimale stimato"))),
       el("tbody", {}, s.esercizi.map((e) => el("tr", {},
         el("td", {}, e.nome),
-        el("td", {}, (e.serie ?? []).map((x) => testoSerie(x, e.unita)).join(" · ") || "—"),
+        el("td", { style: "white-space:normal" }, (e.serie ?? []).map((x) => testoSerie(x, e.unita)).join(" · ") || "—"),
         el("td", {}, volume(e.serie) ? fmtNum(volume(e.serie)) + " kg" : "—"),
         el("td", {}, massimale(e.serie) ? fmtKg(massimale(e.serie)) + " kg" : "—")))))),
     el("p", { class: "sotto" }, "Massimale stimato con la formula di Epley, dalla serie migliore.")) : null;
