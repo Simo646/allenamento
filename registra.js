@@ -4,7 +4,7 @@ import { precompilaEsercizio, vociDelGiorno, ESERCIZI, testoSerie } from "./dati
 import { riassumiFit, riassumiXml, idSessione, CAMPI_FILE, CAMPI_DETTAGLIO, TIPI, SOTTOTIPI_BICI, volume } from "./analisi-file.js";
 import { $, el, metti, icona, ICONE, oggi, fmtData, fmtGiorno, fmtNum, fmtKg, fmtSec, numero, avviso, esito, ricorda, conConferma, campo, opzione, testoKg } from "./util.js";
 import { caricaLettoreFit } from "./lettore-fit.js";
-import { metriche, barraZone } from "./dettaglio.js";
+import { metriche, barraZone, correggiDislivello } from "./dettaglio.js";
 import { contenutoScheda, riassuntoScheda } from "./schede.js";
 import { Registratore } from "./registratore.js";
 import { disponibile, collegaFascia, schermoAcceso } from "./sorgenti.js";
@@ -309,6 +309,7 @@ export async function salvaRiassunto(r, param = {}, presi = new Set()) {
   if (r.traccia) {
     if (stessa) await eliminaMappa(id); // la traccia può essere cambiata
     if (param.mappa !== false) scaricaMappa(id, r.traccia).catch(() => { /* riprova aprendo l'allenamento */ });
+    if (doc.salita_da === "gps") correggiDislivello({ ...doc, id }).catch(() => { /* riprova aprendo l'allenamento */ });
   }
   return id;
 }

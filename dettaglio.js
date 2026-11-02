@@ -3,8 +3,8 @@ import { stato, limiti, ZONE, intervalloZona, coloreTipo, nomeTipo, attive, vai 
 import { SOTTOTIPI_BICI, volume, massimale, trovaVuoti, salitaDaCurvaGps } from "./analisi-file.js";
 import { $, el, metti, icona, ICONE, fmtData, fmtDataLunga, fmtNum, fmtDur, fmtOre, fmtPasso, fmtKg, numero, avviso, esito, conConferma, somma, campo } from "./util.js";
 import { COLORE_ZONA, graficoTraccia, graficoCurva, graficoTempo } from "./grafici.js";
-import { testoSerie } from "./dati.js";
-import { leggiMappa, scaricaMappa, eliminaMappa, mappeAttive } from "./mappe.js";
+import { leggiMappa, scaricaMappa, eliminaMappa, mappeAttive, quotaDalTerreno } from "./mappe.js";
+import { testoSerie, CARDIO } from "./dati.js";
 
 export const zoneDi = (s) => [s.z1_min, s.z2_min, s.z3_min, s.z4_min, s.z5_min];
 export const haZone = (s) => zoneDi(s).some((z) => z != null);
@@ -47,6 +47,19 @@ export function voceSessione(s) {
 }
 
 const CAMPI_MODIFICABILI = [["durata_min", "Durata (min)"], ["km", "Km"], ["salita_m", "Salita (m)"], ["fc_media", "FC media"], ["fc_max", "FC massima"]];
+
+// Telefono senza barometro: dislivello e curva della quota si rifanno con le quote del terreno lungo la traccia (serve
+// la rete; si spegne insieme alle mappe). Vale per le registrazioni dell'app con la quota del GPS, una volta sola.
+export const daCorreggere = (s) => CARDIO.includes(s?.tipo) && s.fonte === "Registrata con l'app" && (s.salita_da === "gps" || s.salita_da == null);
+export async function correggiDislivello(s) {
+  if (!daCorreggere(s) || !mappeAttive()) return null;
+  const d = (await stato.archivio.leggi("dettagli", s.id)) ?? {};
+  const c = await quotaDalTerreno(d.traccia, { bici: s.tipo === "Bici", passo: d.curve?.passo_s ?? 15 });
+  if (c?.salita_m == null) return null;
+  await stato.archivio.scrivi("dettagli", s.id, { ...d, curve: { ...(d.curve ?? {}), passo_s: d.curve?.passo_s ?? 15, quota: c.quota } });
+  await stato.archivio.scrivi("sessioni", s.id, { ...s, salita_m: c.salita_m, salita_da: "terreno" });
+  return c.salita_m;
+}
 
 export function apriDettaglio(id) {
   const s = stato.sessioni.find((x) => x.id === id);
@@ -163,8 +176,14 @@ async function caricaPesanti(s, box, lim, aggiornaSalita) {
   let d = null;
   try { d = await stato.archivio.leggi("dettagli", s.id); } catch { /* senza dettagli si vede il resto */ }
   d ??= {};
-  // Fino alla 1.2.0 l'app sommava la quota GPS grezza e il dislivello veniva gonfiato: lo ricalcolo dalla curva della
-  // quota, lisciata, una volta sola.
+  // Senza barometro il dislivello viene dal terreno (con la rete); altrimenti, per le registrazioni fino alla 1.2.0 che
+  // sommavano la quota GPS grezza, dalla curva della quota lisciata.
+  if (daCorreggere(s) && mappeAttive()) {
+    try {
+      const v = await correggiDislivello(s);
+      if (v != null) { s = { ...s, salita_m: v, salita_da: "terreno" }; aggiornaSalita(v); d = (await stato.archivio.leggi("dettagli", s.id)) ?? d; }
+    } catch { /* senza rete resta quello che c'è */ }
+  }
   if (s.fonte === "Registrata con l'app" && s.salita_da == null && d.curve?.quota?.length) {
     const v = salitaDaCurvaGps(d.curve.quota);
     if (v != null) {
@@ -204,7 +223,9 @@ async function caricaPesanti(s, box, lim, aggiornaSalita) {
     ["potenza", "Potenza", "var(--t-hiit)", (v) => `${fmtNum(v)} W`],
     ["cadenza", "Cadenza", "var(--t-corsa)", (v) => `${fmtNum(v)}`],
   ].filter((x) => x && c[x[0]]) : [];
-  const fonteQuota = { barometro: "Quota dal barometro del telefono.", gps: "Quota dal GPS del telefono: il dislivello è calcolato sulla quota lisciata, perché il GPS in verticale sbaglia di qualche metro." }[s.salita_da];
+  const fonteQuota = { barometro: "Quota dal barometro del telefono.",
+    terreno: "Quota del terreno lungo la traccia (Terrain Tiles su AWS, dati EU-DEM e SRTM): il telefono non ha il barometro e il GPS in verticale sbaglia troppo.",
+    gps: "Quota dal GPS del telefono: il dislivello è calcolato sulla quota lisciata, perché il GPS in verticale sbaglia di qualche metro." }[s.salita_da];
   for (const [k, nome, colore, formato] of extra) {
     const g = el("div");
     pezzi.push(el("section", { class: "card" }, el("h2", {}, nome), k === "quota" && fonteQuota ? el("p", { class: "sotto" }, fonteQuota) : null, g));

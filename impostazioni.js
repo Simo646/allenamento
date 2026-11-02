@@ -229,8 +229,8 @@ function cardAspetto() {
   return el("section", { class: "card modulo" }, el("h2", {}, "Aspetto e mappe"),
     el("div", {},
       voce("i-tema", "Tema scuro", "Fondo nero e testo chiaro, come un ciclocomputer di notte.", temaScuro(), (si) => applicaTema(si)),
-      mappePossibili() ? voce("i-mappe", "Mappa sotto le tracce", "Salvando un'uscita col GPS scarica la mappa topografica della zona da OpenTopoMap.", mappeAttive(), (si) => impostaMappe(si)) : null),
-    mappePossibili() ? el("p", { class: "sotto" }, "Per la mappa OpenTopoMap riceve solo la zona del percorso (e l'indirizzo IP, come ogni sito), non i tuoi allenamenti. Le mappe restano su questo telefono e non vanno nel backup.") : null,
+      mappePossibili() ? voce("i-mappe", "Mappa e quote del terreno", "Salvando un'uscita col GPS scarica la mappa della zona da OpenTopoMap e, se il telefono non ha il barometro, le quote del terreno da AWS per un dislivello giusto.", mappeAttive(), (si) => impostaMappe(si)) : null),
+    mappePossibili() ? el("p", { class: "sotto" }, "OpenTopoMap e AWS ricevono solo la zona del percorso (e l'indirizzo IP, come ogni sito), non i tuoi allenamenti. Le mappe restano su questo telefono e non vanno nel backup.") : null,
     mappePossibili() ? cancellaMappe : null);
 }
 

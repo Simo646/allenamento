@@ -303,6 +303,27 @@ export function salitaDaQuote(punti, soglia = SOGLIA_SALITA_M) {
   return Math.round(salita);
 }
 
+// Salita dalle quote del terreno (modello digitale EU-DEM/SRTM) lungo la traccia, per i telefoni senza barometro: il GPS
+// in verticale fa anche salti di oltre 100 m. Profilo ogni 20 m di strada; a piedi media su 100 m. In bici prima la
+// mediana su 420 m, che toglie i picchi fino a circa 200 m di gallerie e strade a strapiombo (lì il terreno è la
+// montagna sopra o accanto), poi la media. Sulle uscite di prova: a piedi entro il 10%, in bici tra -11% e +16%
+// rispetto al barometro.
+export function salitaDalTerreno(lat, lon, quote, { bici = false } = {}) {
+  const d = [0];
+  for (let i = 1; i < lat.length; i++) d.push(d[i - 1] + haversine({ lat: lat[i - 1], lon: lon[i - 1] }, { lat: lat[i], lon: lon[i] }));
+  if (!(d.at(-1) >= 60)) return null;
+  const p = [];
+  for (let s = 0, j = 0; s <= d.at(-1); s += 20) {
+    while (j < d.length - 2 && d[j + 1] < s) j++;
+    const f = d[j + 1] > d[j] ? Math.min(1, Math.max(0, (s - d[j]) / (d[j + 1] - d[j]))) : 0;
+    p.push(quote[j] + (quote[j + 1] - quote[j]) * f);
+  }
+  const finestra = (v, m, f) => v.map((_, i) => f(v.slice(Math.max(0, i - m), i + m + 1)));
+  const mediana = (a) => [...a].sort((x, y) => x - y)[a.length >> 1];
+  const v = finestra(bici ? finestra(p, 10, mediana) : p, 2, (a) => a.reduce((x, y) => x + y, 0) / a.length);
+  return salitaDaQuote(v.map((ele) => ({ ele })), 3);
+}
+
 // Salita da una curva di quota a passo fisso (15 s) presa dal GPS del telefono, per le registrazioni fatte prima che
 // l'app lisciasse la quota: media mobile su 5 campioni (75 s) e soglia di 10 m.
 export function salitaDaCurvaGps(quota = []) {

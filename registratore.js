@@ -110,6 +110,16 @@ export class Registratore {
     let q, fonte;
     if (baro != null) { q = baro; fonte = "barometro"; }
     else if (gps != null) {
+      // Salti della quota GPS (anche di 100 m e più): si ignorano; se il nuovo livello resta per 2 minuti si riparte da
+      // lì senza contarlo come salita.
+      if (this.fonteQuota === "gps" && this.quotaLiscia != null && Math.abs(gps - this.quotaLiscia) > 30) {
+        this.saltoDa ??= t;
+        if (t - this.saltoDa < 120000) return;
+        this.quotaLiscia = this.rifQuota = gps;
+        this.saltoDa = null;
+        return;
+      }
+      this.saltoDa = null;
       const dt = this.tQuota != null ? Math.max(0, (t - this.tQuota) / 1000) : 0;
       this.quotaLiscia = this.quotaLiscia == null || this.fonteQuota !== "gps" ? gps : this.quotaLiscia + (1 - Math.exp(-dt / 30)) * (gps - this.quotaLiscia);
       this.tQuota = t;

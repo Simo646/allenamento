@@ -1,9 +1,9 @@
-// Mappa topografica sotto le tracce GPS (app Android). Salvando un allenamento con la traccia, o aprendolo se la mappa
+// Mappa topografica sotto le tracce GPS (app Android) e quote del terreno per il dislivello dei telefoni senza barometro. Salvando un allenamento con la traccia, o aprendolo se la mappa
 // manca, si scaricano da OpenTopoMap le poche tessere che coprono il percorso e si compongono in un'immagine 4:3,
 // tenuta sul telefono (IndexedDB "allenamento-mappe"). Le mappe non vanno nei backup: si riscaricano aprendo
 // l'allenamento. Stessa proiezione Web Mercator del disegno della traccia (mondo() di analisi-file.js), quindi la
 // traccia ci sta sopra allineata. Chi gestisce le mappe vede la zona richiesta: per questo si possono spegnere.
-import { mondo } from "./analisi-file.js";
+import { mondo, salitaDalTerreno } from "./analisi-file.js";
 import { nativo } from "./sorgenti.js";
 import { ricorda } from "./util.js";
 
@@ -103,3 +103,44 @@ export async function leggiMappa(id) {
 }
 export const eliminaMappa = (id) => archivio("readwrite", (s) => s.delete(id)).catch(() => {});
 export const eliminaTutteLeMappe = () => archivio("readwrite", (s) => s.clear()).catch(() => {});
+
+/* ---------- quote del terreno ---------- */
+// Terrain Tiles su AWS (Mapzen; in Italia EU-DEM a 25 m): tessere PNG in cui il colore è la quota. Come per la mappa,
+// il servizio vede solo la zona richiesta.
+async function quoteTerreno(lat, lon) {
+  let z = 14, chiavi;
+  for (; ; z--) {
+    chiavi = new Set();
+    for (let i = 0; i < lat.length; i++) { const p = mondo(lat[i], lon[i], z); for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) chiavi.add(`${Math.floor((p.x - 0.5 + dx) / 256)}/${Math.floor((p.y - 0.5 + dy) / 256)}`); }
+    if (chiavi.size <= 24 || z === 10) break;
+  }
+  const tessere = new Map();
+  const lista = [...chiavi];
+  for (let i = 0; i < lista.length; i += 4) await Promise.all(lista.slice(i, i + 4).map(async (k) => {
+    const r = await fetch(`https://elevation-tiles-prod.s3.amazonaws.com/terrarium/${z}/${k}.png`);
+    if (!r.ok) throw new Error(`quote del terreno non disponibili (${r.status})`);
+    const img = await createImageBitmap(await r.blob(), { colorSpaceConversion: "none", premultiplyAlpha: "none" });
+    const tela = document.createElement("canvas");
+    tela.width = tela.height = 256;
+    const c = tela.getContext("2d", { willReadFrequently: true });
+    c.drawImage(img, 0, 0);
+    img.close?.();
+    tessere.set(k, c.getImageData(0, 0, 256, 256).data);
+  }));
+  const h = (x, y) => { const t = tessere.get(`${Math.floor(x / 256)}/${Math.floor(y / 256)}`); const i = ((y % 256) * 256 + (x % 256)) * 4; return t[i] * 256 + t[i + 1] + t[i + 2] / 256 - 32768; };
+  return lat.map((la, i) => {
+    const p = mondo(la, lon[i], z), fx = p.x - 0.5, fy = p.y - 0.5, ix = Math.floor(fx), iy = Math.floor(fy), a = fx - ix, b = fy - iy;
+    return h(ix, iy) * (1 - a) * (1 - b) + h(ix + 1, iy) * a * (1 - b) + h(ix, iy + 1) * (1 - a) * b + h(ix + 1, iy + 1) * a * b;
+  });
+}
+
+// Salita e curva della quota (a passo `passo` secondi) dalle quote del terreno lungo la traccia {t, lat, lon}.
+export async function quotaDalTerreno(traccia, { bici = false, passo = 15 } = {}) {
+  if (!mappeAttive() || !(traccia?.lat?.length > 10)) return null;
+  const quote = await quoteTerreno(traccia.lat, traccia.lon);
+  const salita_m = salitaDalTerreno(traccia.lat, traccia.lon, quote, { bici });
+  const secchi = Array.from({ length: Math.floor(traccia.t.at(-1) / passo) + 1 }, () => []);
+  // Un punto può avere un tempo di poco negativo: il fix GPS preso un attimo prima di Avvia.
+  traccia.t.forEach((s, i) => secchi[Math.min(secchi.length - 1, Math.max(0, Math.floor(s / passo)))].push(quote[i]));
+  return { salita_m, quota: secchi.map((a) => (a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : null)) };
+}
