@@ -19,6 +19,10 @@ export function tacche(min, max, { n = 4, minuti = false } = {}) {
   return t;
 }
 
+// Altezza di un grafico: in proporzione alla larghezza, tra un minimo e un massimo, e mai oltre il 60% dello schermo
+// (con il telefono in orizzontale lo schermo è basso).
+const altezza = (W, rapporto, min, max) => Math.round(Math.min(Math.max(W * rapporto, min), max, Math.max(min * 0.8, innerHeight * 0.6)));
+
 export function pianoGrafico(contenitore, { H = 180, m = { t: 14, r: 12, b: 26, l: 38 } } = {}) {
   contenitore.replaceChildren();
   const box = el("div", { class: "grafico" });
@@ -74,12 +78,43 @@ function sensibile(g, trova, alUscire) {
   };
   area.addEventListener("pointermove", muovi);
   area.addEventListener("pointerdown", muovi);
-  area.addEventListener("pointerleave", () => {
-    const t = g.box.querySelector(".tip");
-    if (t) t.hidden = true;
+  // Col mouse il segno sparisce uscendo dal grafico; col dito resta dove l'hai lasciato, così lo leggi a dito alzato.
+  area.addEventListener("pointerleave", (ev) => {
+    if (ev.pointerType !== "mouse") return;
+    chiudiTip(g);
     alUscire?.();
   });
   g.add(area);
+}
+const chiudiTip = (g) => { const t = g.box.querySelector(".tip"); if (t) t.hidden = true; };
+
+// Cursore comune ai grafici di un allenamento: toccando un istante su un grafico (o un punto della traccia) gli altri
+// mostrano lo stesso istante. `mostra(sec, da)` avvisa tutti tranne chi l'ha mosso; sec null li nasconde.
+export function creaCursore() {
+  const grafici = new Set();
+  return { unisci: (f) => grafici.add(f), mostra: (sec, da) => grafici.forEach((f) => f !== da && f(sec)) };
+}
+
+// Segno di un istante su un grafico nel tempo: linea verticale, punto sulla curva e, sui grafici che seguono quello
+// toccato, il valore scritto accanto.
+function segnoIstante(g, colore) {
+  const linea = sv("line", { y1: g.m.t, y2: g.m.t + g.ih, stroke: "var(--ink)", "stroke-width": 1, "stroke-dasharray": "3 3", visibility: "hidden" });
+  const punto = sv("circle", { r: 4, fill: colore, stroke: "var(--surface)", "stroke-width": "2", visibility: "hidden" });
+  const testo = sv("text", { y: g.m.t + 13, class: "valore-istante", visibility: "hidden" });
+  g.add(linea, punto, testo);
+  return {
+    mostra(cx, cy, scritta = null) {
+      linea.setAttribute("x1", cx); linea.setAttribute("x2", cx); linea.setAttribute("visibility", "visible");
+      if (cy == null) punto.setAttribute("visibility", "hidden");
+      else { punto.setAttribute("cx", cx); punto.setAttribute("cy", cy); punto.setAttribute("visibility", "visible"); }
+      const aDestra = cx < g.m.l + g.iw * 0.6;
+      testo.setAttribute("x", aDestra ? cx + 6 : cx - 6);
+      testo.setAttribute("text-anchor", aDestra ? "start" : "end");
+      testo.textContent = scritta ?? "";
+      testo.setAttribute("visibility", scritta ? "visible" : "hidden");
+    },
+    nascondi() { for (const n of [linea, punto, testo]) n.setAttribute("visibility", "hidden"); },
+  };
 }
 
 export const legenda = (contenitore, voci) =>
@@ -201,8 +236,11 @@ export function graficoIntervalli(contenitore, { punti, titoloTip }) {
 
 // Traccia GPS colorata con la zona del battito di ogni tratto, sopra la mappa topografica quando c'è (mappe.js:
 // {url, z, x0, y0, w, h}, stessa proiezione Web Mercator, quindi allineata). Senza mappa, su fondo neutro.
-export function graficoTraccia(contenitore, traccia, curva, lim, mappa = null) {
+export function graficoTraccia(contenitore, traccia, curva, lim, mappa = null, cursore = null) {
   const { t, lat, lon } = traccia;
+  // In orizzontale la mappa (4:3) si restringe quanto basta per stare intera nello schermo.
+  contenitore.style.maxWidth = innerWidth > innerHeight ? `${Math.round(innerHeight * 0.75 * (4 / 3))}px` : "";
+  contenitore.style.marginInline = "auto";
   const g = pianoGrafico(contenitore, { H: (W) => Math.round(mappa ? W * (mappa.h / mappa.w) : Math.min(W * 0.75, 420)), m: { t: 0, r: 0, b: 0, l: 0 } });
   const z = mappa?.z ?? 18;
   const P = lat.map((la, i) => mondo(la, lon[i], z));
@@ -301,6 +339,18 @@ export function graficoTraccia(contenitore, traccia, curva, lim, mappa = null) {
 
   let gesto = null, ultimoTocco = null;
   const nascondiTip = () => { const tip = g.box.querySelector(".tip"); if (tip) tip.hidden = true; iPunto = null; punto.setAttribute("visibility", "hidden"); };
+  // Un istante toccato su un grafico: il punto della traccia a quell'ora.
+  const segui = (sec) => {
+    if (sec == null) { iPunto = null; punto.setAttribute("visibility", "hidden"); return; }
+    let a = 0, b = t.length - 1;
+    while (b - a > 1) { const m = (a + b) >> 1; if (t[m] <= sec) a = m; else b = m; }
+    iPunto = Math.abs(t[b] - sec) < Math.abs(t[a] - sec) ? b : a;
+    chiudiTip(g);
+    punto.setAttribute("cx", sx(px(iPunto)));
+    punto.setAttribute("cy", sy(py(iPunto)));
+    punto.setAttribute("visibility", "visible");
+  };
+  cursore?.unisci(segui);
   sensibile(g, (mx, my) => {
     if (gesto) return null;
     const bx = (mx - vista.tx) / vista.s, by = (my - vista.ty) / vista.s;
@@ -310,13 +360,14 @@ export function graficoTraccia(contenitore, traccia, curva, lim, mappa = null) {
       if (d < dMin) { dMin = d; migliore = i; }
     }
     iPunto = migliore;
+    cursore?.mostra(t[migliore], segui);
     punto.setAttribute("cx", sx(px(migliore)));
     punto.setAttribute("cy", sy(py(migliore)));
     punto.setAttribute("visibility", "visible");
     const s = t[migliore], v = fcA(migliore), zz = zonaA(migliore);
     return { x: sx(px(migliore)), y: sy(py(migliore)), titolo: `${Math.floor(s / 3600)}:${String(Math.floor((s % 3600) / 60)).padStart(2, "0")} dalla partenza`,
       righe: v == null ? [[null, "Battito", "—"]] : [[COLORE_ZONA[zz], "Battito", `${v} bpm`], [null, "Zona", ZONE[zz]]] };
-  }, () => { iPunto = null; punto.setAttribute("visibility", "hidden"); });
+  }, () => { iPunto = null; punto.setAttribute("visibility", "hidden"); cursore?.mostra(null, segui); });
 
   // Gesti con le dita: due dita ingrandiscono (attorno al punto in mezzo), un dito sposta la mappa ingrandita.
   const qui = (tc) => { const r = g.svg.getBoundingClientRect(); return { x: ((tc.clientX - r.left) / r.width) * g.W, y: ((tc.clientY - r.top) / r.height) * g.H }; };
@@ -406,8 +457,8 @@ const tipVuoto = (vuoti, sec, xPx, g) => {
 };
 
 // Curva del battito di una sessione, sulle bande delle zone; `vuoti` da trovaVuoti() di analisi-file.js.
-export function graficoCurva(contenitore, curva, lim, vuoti = []) {
-  const g = pianoGrafico(contenitore, { H: (W) => Math.round(Math.min(Math.max(W * 0.72, 250), 360)), m: { t: 10, r: 30, b: 24, l: 36 } });
+export function graficoCurva(contenitore, curva, lim, vuoti = [], cursore = null) {
+  const g = pianoGrafico(contenitore, { H: (W) => altezza(W, 0.72, 250, 360), m: { t: 10, r: 30, b: 24, l: 36 } });
   const fc = curva.fc;
   const validi = fc.filter((v) => v != null);
   const lo = Math.min(Math.floor((Math.min(...validi) - 5) / 10) * 10, lim[0] - 10);
@@ -433,17 +484,24 @@ export function graficoCurva(contenitore, curva, lim, vuoti = []) {
       stroke: "var(--faint)", "stroke-width": "1.5", "stroke-dasharray": "3 4" }));
   }
   g.add(sv("path", { d: percorso(fc, curva.passo_s, x, y), fill: "none", stroke: "var(--ink)", "stroke-width": "2.4", "stroke-linejoin": "round", "stroke-linecap": "round" }));
-  const punto = sv("circle", { r: 4, fill: "var(--ink)", stroke: "var(--surface)", "stroke-width": "2", visibility: "hidden" });
-  g.add(punto);
+  const segno = segnoIstante(g, "var(--ink)");
+  const segui = (sec) => {
+    const i = sec == null ? -1 : Math.floor(sec / curva.passo_s);
+    if (i < 0 || i >= fc.length) return segno.nascondi();
+    chiudiTip(g);
+    const v = fc[i];
+    segno.mostra(x((i + 0.5) * curva.passo_s), v == null ? null : y(v), v == null ? "—" : `${v} bpm · Z${zonaDi(v, lim)}`);
+  };
+  cursore?.unisci(segui);
   sensibile(g, (px) => {
     const i = Math.max(0, Math.min(fc.length - 1, Math.round(((px - g.m.l) / g.iw) * fc.length - 0.5)));
-    const v = fc[i];
-    if (v == null) { punto.setAttribute("visibility", "hidden"); return tipVuoto(vuoti, i * curva.passo_s, x((i + 0.5) * curva.passo_s), g); }
-    const cx = x((i + 0.5) * curva.passo_s), cy = y(v);
-    punto.setAttribute("cx", cx); punto.setAttribute("cy", cy); punto.setAttribute("visibility", "visible");
-    const sec = i * curva.passo_s, zz = zonaDi(v, lim) - 1;
-    return { x: cx, y: cy, titolo: `${Math.floor(sec / 60)}' ${String(sec % 60).padStart(2, "0")}"`, righe: [[COLORE_ZONA[zz], "Battito", `${v} bpm`], [null, "Zona", ZONE[zz]]] };
-  }, () => punto.setAttribute("visibility", "hidden"));
+    const v = fc[i], sec = i * curva.passo_s, cx = x((i + 0.5) * curva.passo_s);
+    cursore?.mostra(sec + curva.passo_s / 2, segui);
+    segno.mostra(cx, v == null ? null : y(v));
+    if (v == null) return tipVuoto(vuoti, sec, cx, g);
+    const zz = zonaDi(v, lim) - 1;
+    return { x: cx, y: y(v), titolo: `${Math.floor(sec / 60)}' ${String(sec % 60).padStart(2, "0")}"`, righe: [[COLORE_ZONA[zz], "Battito", `${v} bpm`], [null, "Zona", ZONE[zz]]] };
+  }, () => { segno.nascondi(); cursore?.mostra(null, segui); });
 }
 
 function percorso(valori, passo, x, y) {
@@ -457,18 +515,20 @@ function percorso(valori, passo, x, y) {
 }
 
 // Una grandezza nel tempo (quota, velocità, potenza, cadenza) con area sotto la linea.
-export function graficoTempo(contenitore, { valori, passo_s, colore, formato, nome, vuoti = [] }) {
+export function graficoTempo(contenitore, { valori, passo_s, colore, formato, formatoAsse = formato, nome, vuoti = [], cursore = null }) {
   const validi = valori.filter((v) => v != null);
   if (validi.length < 2) return vuoto(contenitore, "Dati insufficienti.");
-  const g = pianoGrafico(contenitore, { H: 150, m: { t: 10, r: 10, b: 24, l: 40 } });
-  const durS = valori.length * passo_s;
   const ticks = tacche(Math.min(...validi), Math.max(...validi), { n: 3 });
+  // Margine sinistro su misura per le etichette dell'asse, che altrimenti uscirebbero dalla scheda.
+  const l = Math.max(32, Math.round(Math.max(...ticks.map((t) => formatoAsse(t).length)) * 6.4) + 10);
+  const g = pianoGrafico(contenitore, { H: (W) => altezza(W, 0.52, 170, 260), m: { t: 10, r: 10, b: 24, l } });
+  const durS = valori.length * passo_s;
   const lo = ticks[0], hi = ticks[ticks.length - 1] > lo ? ticks[ticks.length - 1] : lo + 1;
   const x = (s) => g.m.l + (s / durS) * g.iw;
   const y = (v) => g.m.t + g.ih - ((v - lo) / (hi - lo)) * g.ih;
   const soste = vuoti.filter((q) => q.tipo === "sosta");
   disegnaVuoti(g, soste, x);
-  asseY(g, ticks, y, formato);
+  asseY(g, ticks, y, formatoAsse);
   asseTempo(g, durS, x);
   const linea = percorso(valori, passo_s, x, y);
   const base = g.m.t + g.ih;
@@ -479,15 +539,21 @@ export function graficoTempo(contenitore, { valori, passo_s, colore, formato, no
   }).join("");
   g.add(sv("path", { d: area, fill: colore, "fill-opacity": "0.14" }),
     sv("path", { d: linea, fill: "none", stroke: colore, "stroke-width": "1.8", "stroke-linejoin": "round" }));
-  const punto = sv("circle", { r: 4, fill: colore, stroke: "var(--surface)", "stroke-width": "2", visibility: "hidden" });
-  g.add(punto);
+  const segno = segnoIstante(g, colore);
+  const segui = (sec) => {
+    const i = sec == null ? -1 : Math.floor(sec / passo_s);
+    if (i < 0 || i >= valori.length) return segno.nascondi();
+    chiudiTip(g);
+    const v = valori[i];
+    segno.mostra(x((i + 0.5) * passo_s), v == null ? null : y(v), v == null ? "—" : formato(v));
+  };
+  cursore?.unisci(segui);
   sensibile(g, (px) => {
     const i = Math.max(0, Math.min(valori.length - 1, Math.round(((px - g.m.l) / g.iw) * valori.length - 0.5)));
-    const v = valori[i];
-    if (v == null) { punto.setAttribute("visibility", "hidden"); return tipVuoto(soste, i * passo_s, x((i + 0.5) * passo_s), g); }
-    const cx = x((i + 0.5) * passo_s), cy = y(v);
-    punto.setAttribute("cx", cx); punto.setAttribute("cy", cy); punto.setAttribute("visibility", "visible");
-    const sec = i * passo_s;
-    return { x: cx, y: cy, titolo: `${Math.floor(sec / 60)}' ${String(sec % 60).padStart(2, "0")}"`, righe: [[colore, nome, formato(v)]] };
-  }, () => punto.setAttribute("visibility", "hidden"));
+    const v = valori[i], sec = i * passo_s, cx = x((i + 0.5) * passo_s);
+    cursore?.mostra(sec + passo_s / 2, segui);
+    segno.mostra(cx, v == null ? null : y(v));
+    if (v == null) return tipVuoto(soste, sec, cx, g);
+    return { x: cx, y: y(v), titolo: `${Math.floor(sec / 60)}' ${String(sec % 60).padStart(2, "0")}"`, righe: [[colore, nome, formato(v)]] };
+  }, () => { segno.nascondi(); cursore?.mostra(null, segui); });
 }

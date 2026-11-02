@@ -2,7 +2,7 @@
 import { stato, limiti, ZONE, intervalloZona, coloreTipo, nomeTipo, attive, vai } from "./stato.js";
 import { SOTTOTIPI_BICI, volume, massimale, trovaVuoti, salitaDaCurvaGps } from "./analisi-file.js";
 import { $, el, metti, icona, ICONE, fmtData, fmtDataLunga, fmtNum, fmtDur, fmtOre, fmtPasso, fmtKg, numero, avviso, esito, conConferma, somma, campo } from "./util.js";
-import { COLORE_ZONA, graficoTraccia, graficoCurva, graficoTempo } from "./grafici.js";
+import { COLORE_ZONA, graficoTraccia, graficoCurva, graficoTempo, creaCursore } from "./grafici.js";
 import { leggiMappa, scaricaMappa, eliminaMappa, mappeAttive, quotaDalTerreno } from "./mappe.js";
 import { testoSerie, CARDIO } from "./dati.js";
 
@@ -197,13 +197,13 @@ async function caricaPesanti(s, box, lim, aggiornaSalita) {
   if (d.traccia?.lat?.length > 1) {
     const g = el("div");
     const nota = el("p", { class: "sotto" }, "Ogni tratto ha il colore della zona del battito. Tocca la traccia per tempo e battito.");
-    pezzi.push(el("section", { class: "card" }, el("h2", {}, "Traccia"), nota, g));
-    const mappa = await leggiMappa(s.id);
-    grafici.push(() => graficoTraccia(g, d.traccia, d.curva_fc, lim, mappa));
+    pezzi.push(el("section", { class: "card card-grafico" }, el("h2", {}, "Traccia"), nota, g));
+    let mappa = await leggiMappa(s.id);
+    grafici.push((cur) => graficoTraccia(g, d.traccia, d.curva_fc, lim, mappa, cur));
     // Mappa che manca (allenamento salvato senza rete, o tornato da un backup) o salvata a metà dettaglio prima della
     // 1.4.0: la riscarico e ridisegno.
     if ((!mappa || !mappa.alta) && mappeAttive()) scaricaMappa(s.id, d.traccia, { rifai: !!mappa })
-      .then(async (ok) => { const m = ok && g.isConnected ? await leggiMappa(s.id) : null; if (m) graficoTraccia(g, d.traccia, d.curva_fc, lim, m); })
+      .then(async (ok) => { const m = ok && g.isConnected ? await leggiMappa(s.id) : null; if (m) { mappa = m; graficoTraccia(g, d.traccia, d.curva_fc, lim, m, cursore); } })
       .catch(() => { if (nota.isConnected) nota.textContent += " La mappa non si è scaricata: riprova con la rete aprendo di nuovo l'allenamento."; });
   }
   // Soste (dispositivo in pausa, nessun dato) e tratti senza fascia, per segnarli sui grafici.
@@ -215,25 +215,30 @@ async function caricaPesanti(s, box, lim, aggiornaSalita) {
     const nota = [`Media ogni ${d.curva_fc.passo_s} secondi, sulle bande delle tue zone.`];
     if (soste.length) nota.push(`In grigio ${soste.length === 1 ? "la sosta" : `le ${soste.length} soste`} (${fmtDur(somma(soste, (v) => v.a - v.da) / 60)} in tutto): il dispositivo era in pausa e non registrava, il tratteggio ricollega il battito di prima e di dopo.`);
     if (senzaFc.length) nota.push(`"No FC": ${senzaFc.length === 1 ? "un tratto" : `${senzaFc.length} tratti`} senza battito dalla fascia.`);
-    pezzi.push(el("section", { class: "card" }, el("h2", {}, "Battito"), el("p", { class: "sotto" }, nota.join(" ")), g));
-    grafici.push(() => graficoCurva(g, d.curva_fc, lim, vuoti));
+    pezzi.push(el("section", { class: "card card-grafico" }, el("h2", {}, "Battito"), el("p", { class: "sotto" }, nota.join(" ")), g));
+    grafici.push((cur) => graficoCurva(g, d.curva_fc, lim, vuoti, cur));
   }
   const c = d.curve;
   const extra = c ? [
     ["quota", "Quota", "var(--t-trekking)", (v) => `${fmtNum(v)} m`],
-    s.tipo === "Bici" || !conPasso(s.tipo) ? ["velocita", "Velocità", "var(--t-bici)", (v) => `${fmtNum(v * 3.6, 1)} km/h`] : null,
+    s.tipo === "Bici" || !conPasso(s.tipo) ? ["velocita", "Velocità", "var(--t-bici)", (v) => `${fmtNum(v * 3.6, 1)} km/h`, (v) => `${fmtNum(v * 3.6)} km/h`] : null,
     ["potenza", "Potenza", "var(--t-hiit)", (v) => `${fmtNum(v)} W`],
     ["cadenza", "Cadenza", "var(--t-corsa)", (v) => `${fmtNum(v)}`],
   ].filter((x) => x && c[x[0]]) : [];
   const fonteQuota = { barometro: "Quota dal barometro del telefono.",
     terreno: "Quota del terreno lungo la traccia (Terrain Tiles su AWS, dati EU-DEM e SRTM): la quota misurata mancava o non era affidabile.",
     gps: "Quota dal GPS del telefono: il dislivello è calcolato sulla quota lisciata, perché il GPS in verticale sbaglia di qualche metro." }[s.salita_da];
-  for (const [k, nome, colore, formato] of extra) {
+  for (const [k, nome, colore, formato, formatoAsse] of extra) {
     const g = el("div");
-    pezzi.push(el("section", { class: "card" }, el("h2", {}, nome), k === "quota" && fonteQuota ? el("p", { class: "sotto" }, fonteQuota) : null, g));
-    grafici.push(() => graficoTempo(g, { valori: c[k], passo_s: c.passo_s, colore, formato, nome, vuoti: soste }));
+    pezzi.push(el("section", { class: "card card-grafico" }, el("h2", {}, nome), k === "quota" && fonteQuota ? el("p", { class: "sotto" }, fonteQuota) : null, g));
+    grafici.push((cur) => graficoTempo(g, { valori: c[k], passo_s: c.passo_s, colore, formato, formatoAsse, nome, vuoti: soste, cursore: cur }));
   }
   if (!pezzi.length) { box.remove(); return; }
   metti(box, ...pezzi);
-  requestAnimationFrame(() => grafici.forEach((f) => f()));
+  // Un cursore comune: toccando un istante su un grafico, gli altri e la mappa mostrano lo stesso istante. Se cambia la
+  // larghezza (telefono girato in orizzontale) i grafici si ridisegnano più larghi.
+  let cursore = null, larghezza = box.clientWidth;
+  const disegna = () => { larghezza = box.clientWidth; cursore = creaCursore(); grafici.forEach((f) => f(cursore)); };
+  requestAnimationFrame(disegna);
+  new ResizeObserver(() => { if (box.isConnected && Math.abs(box.clientWidth - larghezza) > 8) requestAnimationFrame(disegna); }).observe(box);
 }
