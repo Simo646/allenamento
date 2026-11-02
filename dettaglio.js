@@ -1,6 +1,6 @@
 // Un allenamento: riga negli elenchi e foglio di dettaglio (numeri, traccia, curve, zone, serie, modifica).
 import { stato, limiti, ZONE, intervalloZona, coloreTipo, nomeTipo, attive, vai } from "./stato.js";
-import { SOTTOTIPI_BICI, volume, massimale, trovaVuoti } from "./analisi-file.js";
+import { SOTTOTIPI_BICI, volume, massimale, trovaVuoti, salitaDaCurvaGps } from "./analisi-file.js";
 import { $, el, metti, icona, ICONE, fmtData, fmtDataLunga, fmtNum, fmtDur, fmtOre, fmtPasso, fmtKg, numero, avviso, esito, conConferma, somma, campo } from "./util.js";
 import { COLORE_ZONA, graficoTraccia, graficoCurva, graficoTempo } from "./grafici.js";
 import { testoSerie } from "./dati.js";
@@ -153,14 +153,25 @@ export function apriDettaglio(id) {
   velo.replaceChildren(foglio);
   velo.hidden = false;
   foglio.querySelector(".chiudi").focus();
-  caricaPesanti(s, pesanti, lim);
+  // Il riquadro della salita si aggiorna se la salita viene ricalcolata aprendo l'allenamento.
+  const tileSalita = [...(riquadri?.children ?? [])].find((t) => t.querySelector("small")?.textContent === "Salita");
+  caricaPesanti(s, pesanti, lim, (v) => { const b = tileSalita?.querySelector("b"); if (b?.firstChild) b.firstChild.textContent = fmtNum(v); });
 }
 
 // Traccia e curve stanno in dettagli/<id> e si scaricano solo aprendo l'allenamento.
-async function caricaPesanti(s, box, lim) {
+async function caricaPesanti(s, box, lim, aggiornaSalita) {
   let d = null;
   try { d = await stato.archivio.leggi("dettagli", s.id); } catch { /* senza dettagli si vede il resto */ }
   d ??= {};
+  // Fino alla 1.2.0 l'app sommava la quota GPS grezza e il dislivello veniva gonfiato: lo ricalcolo dalla curva della
+  // quota, lisciata, una volta sola.
+  if (s.fonte === "Registrata con l'app" && s.salita_da == null && d.curve?.quota?.length) {
+    const v = salitaDaCurvaGps(d.curve.quota);
+    if (v != null) {
+      try { await stato.archivio.scrivi("sessioni", s.id, { ...s, salita_m: v, salita_da: "gps" }); s = { ...s, salita_m: v, salita_da: "gps" }; aggiornaSalita(v); }
+      catch { /* resta il valore vecchio */ }
+    }
+  }
   const pezzi = [];
   const grafici = [];
   if (d.traccia?.lat?.length > 1) {
@@ -193,9 +204,10 @@ async function caricaPesanti(s, box, lim) {
     ["potenza", "Potenza", "var(--t-hiit)", (v) => `${fmtNum(v)} W`],
     ["cadenza", "Cadenza", "var(--t-corsa)", (v) => `${fmtNum(v)}`],
   ].filter((x) => x && c[x[0]]) : [];
+  const fonteQuota = { barometro: "Quota dal barometro del telefono.", gps: "Quota dal GPS del telefono: il dislivello è calcolato sulla quota lisciata, perché il GPS in verticale sbaglia di qualche metro." }[s.salita_da];
   for (const [k, nome, colore, formato] of extra) {
     const g = el("div");
-    pezzi.push(el("section", { class: "card" }, el("h2", {}, nome), g));
+    pezzi.push(el("section", { class: "card" }, el("h2", {}, nome), k === "quota" && fonteQuota ? el("p", { class: "sotto" }, fonteQuota) : null, g));
     grafici.push(() => graficoTempo(g, { valori: c[k], passo_s: c.passo_s, colore, formato, nome, vuoti: soste }));
   }
   if (!pezzi.length) { box.remove(); return; }

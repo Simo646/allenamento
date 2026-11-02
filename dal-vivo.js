@@ -2,13 +2,13 @@
 // si è pronti. Cardio: schermata da ciclocomputer con GPS e battito (senza, solo il tempo). HIIT: timer con l'esercizio
 // in corso e il successivo, e segnali sonori a 3-2-1. Forza: si passa alla scheda serie per serie di registra.js, con la
 // fascia già collegata. La registrazione in corso si salva ogni 10 s in IndexedDB: se l'app si chiude, Oggi propone di
-// riprenderla o salvarla. GPS e fascia arrivano da sorgenti.js, i segnali da suoni.js.
+// riprenderla o salvarla. GPS, barometro (per il dislivello) e fascia arrivano da sorgenti.js, i segnali da suoni.js.
 import { stato, registraVista, vai, testata, limiti, attive, nomeTipo, ledDalBattito } from "./stato.js";
 import { SOTTOTIPI_BICI } from "./analisi-file.js";
 import { CARDIO, statoVoci, vociDelGiorno } from "./dati.js";
 import { el, metti, oggi, fmtNum, fmtSec, fmtPasso, numero, avviso, esito, conConferma, ricorda, opzione, campo } from "./util.js";
 import { Registratore } from "./registratore.js";
-import { disponibile, avviaGps, collegaFascia, schermoAcceso, permessoNotifiche, apriImpostazioniPosizione, nativo } from "./sorgenti.js";
+import { disponibile, avviaGps, collegaFascia, schermoAcceso, permessoNotifiche, apriImpostazioniPosizione, nativo, avviaBarometro, haBarometro } from "./sorgenti.js";
 import { metriche, barraZone, apriDettaglio } from "./dettaglio.js";
 import { salvaRiassunto, iniziaForza } from "./registra.js";
 import { contenutoScheda, riassuntoScheda } from "./schede.js";
@@ -82,7 +82,7 @@ export async function riprendiInterrotta(bozza, azione) {
   rec.pausa(bozza.alle);
   if (azione === "salva") return finisci(bozza.alle);
   // Riparte in pausa: GPS di nuovo acceso, la fascia si ricollega dalla schermata, poi "Riprendi".
-  if (rec.conGps && disponibile().gps) await gpsInSfondo();
+  if (rec.conGps && disponibile().gps) { await gpsInSfondo(); s.fermaBaro = await avviaBarometro((q) => s?.rec?.quota(q)); }
   s.fermaSchermo = await schermoAcceso(!!s.hiit);
   vai("dal-vivo", {});
 }
@@ -148,6 +148,8 @@ function schermataPreparazione(main, param) {
   // nell'app Android compare il collegamento alle impostazioni. Si può partire anche senza segnale.
   const statoGps = cardio ? el("p", { class: "stato-sorgente" }, conGps ? "GPS: cerco il segnale…" : "GPS non disponibile qui: registro tempo e battito.") : null;
   const impostazioniGps = el("button", { type: "button", class: "lnk", hidden: true, onclick: apriImpostazioniPosizione }, "Apri le impostazioni");
+  const statoQuota = conGps ? el("p", { class: "sotto" }, "") : null;
+  if (statoQuota) haBarometro().then((b) => { statoQuota.textContent = b ? "Dislivello dal barometro del telefono." : "Il telefono non ha il barometro: il dislivello viene dalla quota del GPS, lisciata."; });
   const erroreGps = (testo) => {
     if (!statoGps?.isConnected) return;
     statoGps.textContent = "GPS: " + testo;
@@ -199,7 +201,7 @@ function schermataPreparazione(main, param) {
     s.rec.avvia(t);
     if (hiit) s.hiit = conFasi({ imp: { ...scelta.hiit }, esercizi: eserciziDelGiro(sc?.esercizi?.map((e) => e.nome), scelta.hiit.n), salto: 0 });
     // Nell'app Android il GPS riparte in modalità "anche a schermo spento", con la notifica fissa.
-    if (conGps) await gpsInSfondo();
+    if (conGps) { await gpsInSfondo(); s.fermaBaro = await avviaBarometro((q) => s?.rec?.quota(q)); }
     s.fermaSchermo = await schermoAcceso(hiit);
     forseSalva(true);
     vai("dal-vivo", param);
@@ -217,7 +219,7 @@ function schermataPreparazione(main, param) {
       sotto, selScheda, autoPausa),
     hiit ? boxTimer(scelta.hiit, sc) : schedaBox(sc),
     el("section", { class: "card modulo" }, el("h2", {}, cardio ? "GPS e fascia cardio" : "Fascia cardio"),
-      statoGps, impostazioniGps, boxFascia,
+      statoGps, impostazioniGps, statoQuota, boxFascia,
       el("p", { class: "sotto" }, cardio ? "La fascia è facoltativa: senza, niente battito e zone." : "Facoltativa: senza, registro lo stesso tempo ed esercizi.")),
     avvisoSchermo,
     el("div", { class: "azioni" }, avvia),
@@ -261,6 +263,7 @@ function boxTimer(h, sc) {
 
 function chiudiSorgenti() {
   clearInterval(s?.timer);
+  s?.fermaBaro?.();
   s?.hiit?.annullaBip?.();
   spegniGps();
   s?.fascia?.scollega?.();
@@ -295,6 +298,7 @@ function schermataRegistrazione(main) {
     const f = r.fcAttuale(t), z = r.zonaAttuale(t, limiti());
     fc.v.textContent = f ?? "—";
     zona.v.textContent = z ? `Z${z}` : "—";
+    for (const c of [fc, zona]) coloraZona(c.nodo, z);
     led.style.setProperty("--led", z ? `var(--z${z})` : "var(--faint)");
     if (conGps) {
       distanza.v.textContent = fmtNum(r.km, 2);
@@ -329,6 +333,12 @@ function schermataRegistrazione(main) {
   s.timer = setInterval(() => { if (!led.isConnected) return; aggiorna(); }, 1000);
 }
 
+// Un riquadro dati nel colore della zona del battito (senza battito torna normale).
+function coloraZona(nodo, z) {
+  nodo.classList.toggle("in-zona", !!z);
+  nodo.style.background = z ? `var(--z${z})` : "";
+  nodo.style.color = z ? `var(--z${z}-ink)` : "";
+}
 const oraInizio = (r) => new Date(r.inizio).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
 const fcMedia = (r) => { const v = r.punti.filter((p) => p.fc).map((p) => p.fc); return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : null; };
 const testoFascia = () => (s.fascia ? (s.statoFascia === "persa" ? "Fascia: segnale perso, riprovo…" : `Fascia: ${s.fascia.nome}`) : "Senza fascia");
@@ -388,6 +398,7 @@ function schermataHiit(main) {
   const fine = conConferma(el("button", { type: "button", class: "btn primario grande" }, "Fine"), "Tocca di nuovo", async () => finisci(Date.now()));
 
   const tile = (k, v) => el("div", { class: "tile" }, el("small", {}, k), v);
+  const tileBattito = tile("Battito", battito);
   const box = el("section", { class: "hiit" }, fase, conto, el("div", { class: "hiit-esercizio" }, etichetta, nome), poi);
   function aggiorna() {
     const t = Date.now();
@@ -405,6 +416,7 @@ function schermataHiit(main) {
     resta.textContent = fmtSec(st.restaTotale);
     const fc = r.fcAttuale(t), z = r.zonaAttuale(t, limiti());
     battito.replaceChildren(fc ? String(fc) : "—", fc ? el("em", {}, ` Z${z}`) : "");
+    coloraZona(tileBattito, z);
     led.style.setProperty("--led", z ? `var(--z${z})` : lavoro ? "var(--z5)" : "var(--faint)");
     stato1.textContent = testoFascia();
     audio.textContent = suoniAttivi() ? "Audio sì" : "Audio no";
@@ -416,7 +428,7 @@ function schermataHiit(main) {
     led,
     el("header", { class: "testata-vivo" }, el("span", {}, (s.scelta?.scheda && stato.schede[s.scelta.scheda]?.titolo) || "HIIT"), el("span", { class: "num" }, oraInizio(r))),
     box,
-    el("div", { class: "tiles quattro" }, tile("Giro", giro), tile("Esercizio", esercizio), tile("Manca", resta), tile("Battito", battito)),
+    el("div", { class: "tiles quattro" }, tile("Giro", giro), tile("Esercizio", esercizio), tile("Manca", resta), tileBattito),
     el("div", { style: "display:flex;justify-content:space-between;align-items:center;gap:12px" }, stato1, audio),
     bottoneCollega(() => aggiorna()));
   mostraComandi([pausa, salta, fine]);

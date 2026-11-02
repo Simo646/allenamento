@@ -24,7 +24,7 @@ export function disponibile() {
 }
 
 /* ---------- GPS ---------- */
-// onPos({t, lat, lon, ele, vel, precisione}); onErrore(testo). Con `sfondo` (solo app Android) la posizione arriva anche
+// onPos({t, lat, lon, ele, vel, precisione, precisioneQuota}); onErrore(testo). Con `sfondo` (solo app Android) la posizione arriva anche
 // a schermo spento, con la notifica fissa "Registrazione in corso". Restituisce la funzione che ferma il GPS.
 export async function avviaGps(onPos, onErrore, { sfondo = false } = {}) {
   if (nativo()) {
@@ -33,15 +33,39 @@ export async function avviaGps(onPos, onErrore, { sfondo = false } = {}) {
     if (sfondo) Object.assign(opzioni, { backgroundTitle: "Registrazione in corso", backgroundMessage: "Allenamento sta registrando percorso e battito." });
     const id = await bg.addWatcher(opzioni, (loc, err) => {
       if (err) return onErrore(err.code === "NOT_AUTHORIZED" ? "Permesso della posizione negato: attivalo nelle impostazioni dell'app." : err.message || "GPS non disponibile.");
-      if (loc) onPos({ t: loc.time ?? Date.now(), lat: loc.latitude, lon: loc.longitude, ele: loc.altitude ?? null, vel: loc.speed ?? null, precisione: loc.accuracy ?? null });
+      if (loc) onPos({ t: loc.time ?? Date.now(), lat: loc.latitude, lon: loc.longitude, ele: loc.altitude ?? null, vel: loc.speed ?? null, precisione: loc.accuracy ?? null, precisioneQuota: loc.altitudeAccuracy ?? null });
     });
     return () => bg.removeWatcher({ id }).catch(() => {});
   }
   const id = navigator.geolocation.watchPosition(
-    (p) => onPos({ t: p.timestamp || Date.now(), lat: p.coords.latitude, lon: p.coords.longitude, ele: p.coords.altitude ?? null, vel: p.coords.speed ?? null, precisione: p.coords.accuracy ?? null }),
+    (p) => onPos({ t: p.timestamp || Date.now(), lat: p.coords.latitude, lon: p.coords.longitude, ele: p.coords.altitude ?? null, vel: p.coords.speed ?? null, precisione: p.coords.accuracy ?? null, precisioneQuota: p.coords.altitudeAccuracy ?? null }),
     (e) => onErrore(e.code === 1 ? "Permesso della posizione negato: attivalo nelle impostazioni del browser." : "Posizione non disponibile, riprovo."),
     { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
   return () => navigator.geolocation.clearWatch(id);
+}
+
+/* ---------- barometro ---------- */
+// Quota dal barometro del telefono (app Android, se il telefono ce l'ha): per il dislivello è molto più affidabile del
+// GPS. onQuota({t, metri}) circa una volta al secondo. Restituisce la funzione che lo ferma, o null senza barometro.
+// Nelle prove su 127.0.0.1, window.__barometroFinto(t) fa da barometro.
+const baroFinto = () => location.hostname === "127.0.0.1" && typeof window.__barometroFinto === "function";
+export async function haBarometro() {
+  if (baroFinto()) return true;
+  if (!nativo()) return false;
+  try { return !!(await plugin("Barometro").disponibile()).disponibile; } catch { return false; }
+}
+export async function avviaBarometro(onQuota) {
+  if (baroFinto()) {
+    const id = setInterval(() => onQuota({ t: Date.now(), metri: window.__barometroFinto(Date.now()) }), 1000);
+    return () => clearInterval(id);
+  }
+  if (!(await haBarometro())) return null;
+  const b = plugin("Barometro");
+  try {
+    const ascolto = await b.addListener("quota", (d) => onQuota({ t: d.t, metri: d.metri }));
+    await b.avvia();
+    return () => { ascolto.remove(); b.ferma().catch(() => {}); };
+  } catch { return null; }
 }
 
 export const apriImpostazioniPosizione = () => { if (nativo()) plugin("BackgroundGeolocation").openSettings().catch(() => {}); };

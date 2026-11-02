@@ -379,3 +379,4 @@ body.con-barra .schede-nav{display:none}
 @media (prefers-reduced-motion:no-preference){.foglio{animation:sale .18s ease-out}@keyframes sale{from{transform:translateY(16px);opacity:.6}}}
 .attribuzione{margin:6px 0 0;font-size:11px;color:var(--muted)}
 .attribuzione a{color:var(--muted)}
+.campo-vivo.in-zona small,.campo-vivo.in-zona em,.tile.in-zona small,.tile.in-zona em{color:inherit}

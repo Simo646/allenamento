@@ -80,7 +80,7 @@ export function zonaDi(fc, limiti) {
 export const CAMPI_FILE = ["inizio", "durata_min", "km", "salita_m", "fc_media", "fc_max",
   "z1_min", "z2_min", "z3_min", "z4_min", "z5_min",
   "vel_media", "vel_max", "cadenza_media", "potenza_media", "potenza_max", "potenza_np", "calorie", "temp_media", "rmssd_ms",
-  "indoor", "fonte", "file"];
+  "indoor", "fonte", "file", "salita_da"];
 // Pesanti: in dettagli/<id>, caricati solo aprendo l'allenamento.
 export const CAMPI_DETTAGLIO = ["curva_fc", "curve", "traccia"];
 
@@ -121,7 +121,7 @@ export function riassumiFit(messages, { limiti, nomeFile = "" } = {}) {
     calorie: s.totalCalories ?? null,
     temp_media: s.avgTemperature ?? null,
     rmssd_ms: rmssd(messages.hrvMesgs),
-    fonte: "File FIT" + (produttore ? " · " + nomeProduttore(produttore) : ""),
+    fonte: "File FIT" + (produttore ? " · " + nomeProduttore(produttore) : ""), salita_da: null,
     file: nomeFile,
   };
 }
@@ -240,13 +240,13 @@ export function riassumiXml(testo, { limiti, nomeFile = "" } = {}) {
     fc_max: base.fc_max ?? l.fcMaxGiri ?? null,
     calorie: l.calorie ?? null, temp_media: null, rmssd_ms: null,
     nome_file: l.nome ?? null,
-    fonte: tcx ? "File TCX" : "File GPX",
+    fonte: tcx ? "File TCX" : "File GPX", salita_da: null,
     file: nomeFile,
   };
 }
 
 /* ---------- calcoli comuni sui punti ---------- */
-export function riassumiPunti(punti, { limiti, attivi = null, inizio = punti[0]?.t } = {}) {
+export function riassumiPunti(punti, { limiti, attivi = null, inizio = punti[0]?.t, sogliaSalita } = {}) {
   const attivo = (t) => !attivi || attivi.some(([a, b]) => t >= a && t < b);
   let secAttivi = 0;
   for (let i = 0; i < punti.length - 1; i++) {
@@ -262,7 +262,7 @@ export function riassumiPunti(punti, { limiti, attivi = null, inizio = punti[0]?
   return {
     durata_min: Math.round(secAttivi / 60),
     km,
-    salita_m: salitaDaQuote(punti),
+    salita_m: salitaDaQuote(punti, sogliaSalita),
     fc_media: fc.length ? Math.round(media(fc)) : null,
     fc_max: fc.length ? Math.max(...fc) : null,
     ...(limiti ? tempoInZona(punti, limiti, attivi) : { z1_min: null, z2_min: null, z3_min: null, z4_min: null, z5_min: null }),
@@ -292,15 +292,22 @@ export function distanzaGps(punti) {
   return m > 0 ? arrotonda(m / 1000, 2) : null;
 }
 
-export function salitaDaQuote(punti) {
+export function salitaDaQuote(punti, soglia = SOGLIA_SALITA_M) {
   const quote = punti.map((p) => p.ele).filter((q) => q != null);
   if (quote.length < 2) return null;
   let salita = 0, rif = quote[0];
   for (const q of quote) {
-    if (q - rif >= SOGLIA_SALITA_M) { salita += q - rif; rif = q; }
-    else if (rif - q >= SOGLIA_SALITA_M) rif = q;
+    if (q - rif >= soglia) { salita += q - rif; rif = q; }
+    else if (rif - q >= soglia) rif = q;
   }
   return Math.round(salita);
+}
+
+// Salita da una curva di quota a passo fisso (15 s) presa dal GPS del telefono, per le registrazioni fatte prima che
+// l'app lisciasse la quota: media mobile su 5 campioni (75 s) e soglia di 10 m.
+export function salitaDaCurvaGps(quota = []) {
+  const lisce = quota.map((_, i) => { const a = quota.slice(Math.max(0, i - 2), i + 3).filter((x) => x != null); return a.length ? a.reduce((x, y) => x + y, 0) / a.length : null; });
+  return salitaDaQuote(lisce.filter((x) => x != null).map((ele) => ({ ele })), 10);
 }
 
 // Minuti per zona. Il tempo di un punto finisce al punto dopo, a 10 s, o allo stop del timer se viene prima.
