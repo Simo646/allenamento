@@ -235,6 +235,45 @@ function cardAspetto() {
 }
 
 /* ---------- dati: backup, ripristino, cancellazione ---------- */
+// Esporta il backup (nell'app Android con il pannello Condividi: Drive, Dropbox, File…). Restituisce [testo, tipo] per
+// l'esito; se va a buon fine segna la data, per il promemoria settimanale in Oggi.
+export async function esportaBackup() {
+  const fatto = (testo) => { ricorda.scrivi("ultimo-backup", new Date().toISOString()); return [testo, "ok"]; };
+  try {
+    const dettagli = await stato.archivio.elenco("dettagli");
+    const backup = creaBackup({ profilo: stato.profilo, settimana: stato.settimana, schede: Object.values(stato.schede), sessioni: stato.sessioni,
+      dettagli, notti: stato.nottiMesi, peso: stato.pesoMesi });
+    const testo = JSON.stringify(backup);
+    // App Android: il file va nel pannello Condividi (Drive, Dropbox, File…).
+    if (nativo()) {
+      try { await condividiFile(`allenamento-backup-${oggi()}.json`, testo); return fatto("Backup pronto: scegli dove salvarlo."); }
+      catch (e) { return /cancel/i.test(e?.message ?? "") ? ["Backup annullato.", ""] : ["Backup non riuscito: " + (e?.message ?? "errore"), "err"]; }
+    }
+    const dl = await window.claude?.use?.("downloads");
+    if (dl) {
+      try { await dl.save({ filename: `allenamento-backup-${oggi()}.json`, data: testo }); return fatto("Backup salvato."); }
+      catch (e) { if (e?.code === "declined") return ["Backup annullato.", ""]; }
+    }
+    // Fuori da claude.ai (app installata dal sito) il file si condivide dal telefono o si scarica come su un sito normale.
+    if (!window.claude) {
+      const nome = `allenamento-backup-${oggi()}.json`;
+      const file = new File([testo], nome, { type: "application/json" });
+      if (matchMedia("(pointer: coarse)").matches && navigator.canShare?.({ files: [file] })) {
+        try { await navigator.share({ files: [file], title: "Backup allenamento" }); return fatto("Backup pronto: salvalo in File, Drive o Dropbox."); }
+        catch (e) { if (e?.name === "AbortError") return ["Backup annullato.", ""]; }
+      }
+      const a = el("a", { href: URL.createObjectURL(file), download: nome });
+      document.body.append(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+      return fatto("Backup scaricato.");
+    }
+    try { await navigator.clipboard.writeText(testo); return fatto("Backup copiato negli appunti: incollalo in un file di testo e salvalo."); }
+    catch { return ["Non riesco a salvare il file da qui. Prova dal computer.", "err"]; }
+  } catch (e) { return ["Backup non riuscito: " + (e?.message ?? "errore"), "err"]; }
+}
+
 // Scelta del file e pulsante di importazione; `dopo` si chiama a importazione finita (dal primo avvio: vai a Oggi).
 function bloccoImporta(esitoD, dopo) {
   let daImportare = null;
@@ -277,42 +316,10 @@ function cardDati() {
   const esporta = el("button", { type: "button", class: "btn" }, "Esporta un backup");
   esporta.onclick = async () => {
     esporta.disabled = true;
-    try {
-      const dettagli = await stato.archivio.elenco("dettagli");
-      const backup = creaBackup({ profilo: stato.profilo, settimana: stato.settimana, schede: Object.values(stato.schede), sessioni: stato.sessioni,
-        dettagli, notti: stato.nottiMesi, peso: stato.pesoMesi });
-      const testo = JSON.stringify(backup);
-      // App Android: il file va nel pannello Condividi (Drive, Dropbox, File…).
-      if (nativo()) {
-        try { await condividiFile(`allenamento-backup-${oggi()}.json`, testo); esito(esitoD, "Backup pronto: scegli dove salvarlo.", "ok"); }
-        catch (e) { esito(esitoD, /cancel/i.test(e?.message ?? "") ? "Backup annullato." : "Backup non riuscito: " + (e?.message ?? "errore"), /cancel/i.test(e?.message ?? "") ? "" : "err"); }
-        return;
-      }
-      const dl = await window.claude?.use?.("downloads");
-      if (dl) {
-        try { await dl.save({ filename: `allenamento-backup-${oggi()}.json`, data: testo }); esito(esitoD, "Backup salvato.", "ok"); return; }
-        catch (e) { if (e?.code === "declined") return esito(esitoD, "Backup annullato."); }
-      }
-      // Fuori da claude.ai (app installata dal sito) il file si condivide dal telefono o si scarica come su un sito normale.
-      if (!window.claude) {
-        const nome = `allenamento-backup-${oggi()}.json`;
-        const file = new File([testo], nome, { type: "application/json" });
-        if (matchMedia("(pointer: coarse)").matches && navigator.canShare?.({ files: [file] })) {
-          try { await navigator.share({ files: [file], title: "Backup allenamento" }); esito(esitoD, "Backup pronto: salvalo in File, Drive o Dropbox.", "ok"); return; }
-          catch (e) { if (e?.name === "AbortError") return esito(esitoD, "Backup annullato."); }
-        }
-        const a = el("a", { href: URL.createObjectURL(file), download: nome });
-        document.body.append(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(a.href), 10000);
-        return esito(esitoD, "Backup scaricato.", "ok");
-      }
-      try { await navigator.clipboard.writeText(testo); esito(esitoD, "Backup copiato negli appunti: incollalo in un file di testo e salvalo.", "ok"); }
-      catch { esito(esitoD, "Non riesco a salvare il file da qui. Prova dal computer.", "err"); }
-    } catch (e) { esito(esitoD, "Backup non riuscito: " + (e?.message ?? "errore"), "err"); }
+    try { esito(esitoD, ...(await esportaBackup())); }
     finally { esporta.disabled = false; }
   };
+  const ultimo = ricorda.leggi("ultimo-backup");
 
   const [scegli, importa] = bloccoImporta(esitoD);
 
@@ -333,7 +340,8 @@ function cardDati() {
   return el("section", { class: "card modulo" }, el("h2", {}, "I tuoi dati"),
     el("p", { class: "sotto" }, testoModo),
     el("div", { class: "azioni" }, esporta, scegli, importa),
-    el("p", { class: "sotto" }, "Il backup contiene anche le tracce GPS, che mostrano da dove parti: salvalo in un posto privato e non condividerlo."),
+    el("p", { class: "sotto" }, (ultimo ? `Ultimo backup: ${new Date(ultimo).toLocaleDateString("it-IT", { day: "numeric", month: "long" })}. ` : "Nessun backup ancora. ") +
+      "Ogni 7 giorni Oggi te lo ricorda. Il backup contiene anche le tracce GPS, che mostrano da dove parti: salvalo in un posto privato e non condividerlo."),
     esitoD,
     el("div", { class: "azioni", style: "border-top:1px solid var(--line);padding-top:12px" }, cancella));
 }

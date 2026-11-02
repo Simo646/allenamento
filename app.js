@@ -2,17 +2,16 @@
 import { stato, avvia, registraVista, vai, programmaRender, testata, coloreTipo, nomeTipo, iconaTipo, chipZona, modulo, descriviVoce, intervalloZona } from "./stato.js";
 import { GIORNI, vociDelGiorno, statoVoci, recupero } from "./dati.js";
 import { TIPI } from "./analisi-file.js";
-import { $, el, metti, icona, ICONE, oggi, piuGiorni, lunediDi, fmtData, fmtNum, fmtDur, fmtOre, somma, ricorda, applicaTema } from "./util.js";
+import { $, el, metti, icona, ICONE, oggi, piuGiorni, lunediDi, fmtData, fmtNum, fmtDur, fmtOre, somma, ricorda, applicaTema, conConferma, avviso, esito } from "./util.js";
 import { voceSessione, perData, metriche, apriDettaglio } from "./dettaglio.js";
 import { contenutoScheda } from "./schede.js";
 import "./settimana.js";
 import "./registra.js";
 import "./analisi.js";
-import "./impostazioni.js";
+import { esportaBackup } from "./impostazioni.js";
 import { leggiBozza, riprendiInterrotta, scartaInterrotta, registrazioneInCorso } from "./dal-vivo.js";
 import { scartaForza } from "./registra.js";
 import { nativo } from "./sorgenti.js";
-import { conConferma } from "./util.js";
 
 applicaTema(); // il tema scelto nelle Impostazioni, prima di disegnare
 
@@ -31,6 +30,7 @@ registraVista("oggi", { vivo: true, render(main) {
     bandaInterrotta(),
     bandaForza(),
     bandaAggiornamento(),
+    bandaBackup(),
     striscia(d),
     cardProgramma(d, voci, fuori),
     azioniRapide(),
@@ -128,6 +128,27 @@ function bandaForza() {
     el("div", { class: "azioni" },
       el("button", { type: "button", class: "btn piccolo primario", onclick: () => vai("registra", { tipo: "forza", riprendi: true }) }, "Riprendi"),
       conConferma(el("button", { type: "button", class: "btn piccolo pericolo" }, "Scarta"), "Tocca di nuovo", async () => { await scartaForza(); programmaRender(); })));
+}
+
+// Promemoria del backup: i dati stanno solo sul telefono. Compare se non ne hai mai fatto uno o se l'ultimo è di 7 o più
+// giorni fa (solo quando c'è almeno un allenamento); "Domani" lo rimanda di un giorno.
+function bandaBackup() {
+  if (!stato.sessioni.length) return null;
+  const ora = Date.now(), ultimo = ricorda.leggi("ultimo-backup"), rinvio = ricorda.leggi("backup-rinvio");
+  if (rinvio && ora < Date.parse(rinvio)) return null;
+  const giorni = ultimo ? Math.floor((ora - Date.parse(ultimo)) / 864e5) : null;
+  if (giorni != null && giorni < 7) return null;
+  const esitoB = el("span", { class: "esito", role: "status" });
+  const esporta = el("button", { type: "button", class: "btn piccolo primario" }, "Esporta ora");
+  esporta.onclick = async () => {
+    esporta.disabled = true;
+    const [testo, tipo] = await esportaBackup();
+    if (tipo === "ok") { avviso(testo); programmaRender(); } else { esito(esitoB, testo, tipo); esporta.disabled = false; }
+  };
+  return el("section", { class: "banda", style: "display:grid;gap:8px" },
+    el("span", {}, (giorni == null ? "Non hai ancora fatto un backup." : `Ultimo backup ${giorni} giorni fa.`) + " I tuoi allenamenti stanno solo su questo telefono: salvane una copia su Drive o Dropbox."),
+    el("div", { class: "azioni" }, esporta,
+      el("button", { type: "button", class: "btn piccolo", onclick: () => { ricorda.scrivi("backup-rinvio", new Date(ora + 864e5).toISOString()); programmaRender(); } }, "Domani"), esitoB));
 }
 
 // App Android: se sul sito c'è una versione più nuova, lo dice con il collegamento per scaricarla.
