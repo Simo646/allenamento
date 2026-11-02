@@ -200,8 +200,9 @@ async function caricaPesanti(s, box, lim, aggiornaSalita) {
     pezzi.push(el("section", { class: "card" }, el("h2", {}, "Traccia"), nota, g));
     const mappa = await leggiMappa(s.id);
     grafici.push(() => graficoTraccia(g, d.traccia, d.curva_fc, lim, mappa));
-    // Mappa che manca (allenamento salvato senza rete, o tornato da un backup): la scarico e ridisegno.
-    if (!mappa && mappeAttive()) scaricaMappa(s.id, d.traccia)
+    // Mappa che manca (allenamento salvato senza rete, o tornato da un backup) o salvata a metà dettaglio prima della
+    // 1.4.0: la riscarico e ridisegno.
+    if ((!mappa || !mappa.alta) && mappeAttive()) scaricaMappa(s.id, d.traccia, { rifai: !!mappa })
       .then(async (ok) => { const m = ok && g.isConnected ? await leggiMappa(s.id) : null; if (m) graficoTraccia(g, d.traccia, d.curva_fc, lim, m); })
       .catch(() => { if (nota.isConnected) nota.textContent += " La mappa non si è scaricata: riprova con la rete aprendo di nuovo l'allenamento."; });
   }

@@ -7,7 +7,7 @@ import { mondo, salitaDalTerreno } from "./analisi-file.js";
 import { nativo } from "./sorgenti.js";
 import { ricorda } from "./util.js";
 
-const W = 1024, H = 768, TESSERA = 256, Z_MAX = 16, Z_MIN = 9;
+const W = 1024, H = 768, TESSERA = 256, Z_MAX = 16, Z_MIN = 9, Z_TESSERE_MAX = 17;
 const MARGINE = 1.3; // la traccia occupa al massimo il 77% del riquadro
 const SCHIARISCI = 0.22; // la mappa un po' più chiara, perché la traccia colorata spicchi
 
@@ -27,6 +27,9 @@ export function inquadra({ lat, lon }) {
       return { z, x0: Math.round(((minX + maxX) / 2) * k - W / 2), y0: Math.round(((minY + maxY) / 2) * k - H / 2), w: W, h: H };
   }
 }
+
+// Lo stesso riquadro al livello dopo: il doppio dei pixel (e 4 volte le tessere), per ingrandire fino a 2× senza sfocare.
+export const raddoppia = (q) => (q.z < Z_TESSERE_MAX ? { z: q.z + 1, x0: q.x0 * 2, y0: q.y0 * 2, w: q.w * 2, h: q.h * 2 } : q);
 
 async function tessera(z, x, y) {
   const r = await fetch(`https://${"abc"[(x + y) % 3]}.tile.opentopomap.org/${z}/${x}/${y}.png`);
@@ -72,15 +75,16 @@ async function archivio(modo, f) {
   });
 }
 
-// Scarica la mappa di un allenamento, se non c'è già. Una alla volta, e mai due volte la stessa insieme.
+// Scarica la mappa di un allenamento, se non c'è già (con `rifai` anche se c'è, per le mappe salvate prima a metà
+// dettaglio). Una alla volta, e mai due volte la stessa insieme.
 const inCorso = new Map();
 let coda = Promise.resolve();
-export function scaricaMappa(id, traccia) {
+export function scaricaMappa(id, traccia, { rifai = false } = {}) {
   if (!mappeAttive() || !(traccia?.lat?.length > 1)) return Promise.resolve(false);
   if (inCorso.has(id)) return inCorso.get(id);
   const lavoro = coda.then(async () => {
-    if (await archivio("readonly", (s) => s.getKey(id))) return true;
-    const riquadro = inquadra(traccia);
+    if (!rifai && await archivio("readonly", (s) => s.getKey(id))) return true;
+    const riquadro = raddoppia(inquadra(traccia));
     const immagine = await componi(riquadro);
     await archivio("readwrite", (s) => s.put({ ...riquadro, immagine }, id));
     return true;
@@ -98,7 +102,7 @@ export async function leggiMappa(id) {
     if (!m) return null;
     if (ultimoUrl) URL.revokeObjectURL(ultimoUrl);
     ultimoUrl = URL.createObjectURL(m.immagine);
-    return { z: m.z, x0: m.x0, y0: m.y0, w: m.w, h: m.h, url: ultimoUrl };
+    return { z: m.z, x0: m.x0, y0: m.y0, w: m.w, h: m.h, url: ultimoUrl, alta: m.w > W };
   } catch { return null; }
 }
 export const eliminaMappa = (id) => archivio("readwrite", (s) => s.delete(id)).catch(() => {});

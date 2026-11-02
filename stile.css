@@ -380,3 +380,7 @@ body.con-barra .schede-nav{display:none}
 .attribuzione{margin:6px 0 0;font-size:11px;color:var(--muted)}
 .attribuzione a{color:var(--muted)}
 .campo-vivo.in-zona small,.campo-vivo.in-zona em,.tile.in-zona small,.tile.in-zona em{color:inherit}
+/* Pulsanti dello zoom sulla mappa della traccia */
+.zoom-mappa{position:absolute;top:8px;left:8px;display:grid;gap:4px}
+.zoom-mappa button{width:34px;height:34px;padding:0;border:var(--tratto);border-radius:var(--r-s);background:var(--surface);color:var(--ink);font-family:var(--font-ui);font-size:20px;font-weight:700;line-height:1}
+.zoom-mappa button:disabled{opacity:.35}

@@ -223,47 +223,150 @@ export function graficoTraccia(contenitore, traccia, curva, lim, mappa = null) {
   const zonaA = (i) => { const v = fcA(i); return v == null ? -1 : zonaDi(v, lim) - 1; };
   const punti = (da, a) => Array.from({ length: a - da + 1 }, (_, j) => `${px(da + j).toFixed(1)},${py(da + j).toFixed(1)}`).join(" ");
 
+  // Zoom fino a 4× (la mappa, salvata al doppio del dettaglio, resta nitida fino a 2×). Mappa e traccia stanno in un
+  // gruppo che si ingrandisce; partenza, arrivo, nord, scala e pulsanti restano fermi. Due dita o doppio tocco per
+  // ingrandire, un dito per spostarsi quando è ingrandita; a grandezza intera un dito fa scorrere la pagina e il tocco
+  // mostra tempo e battito, come prima.
   const idClip = "bordo-" + Math.random().toString(36).slice(2, 8);
   const defs = sv("defs"), clip = sv("clipPath", { id: idClip });
   clip.append(sv("rect", { width: g.W, height: g.H, rx: 12 }));
   defs.append(clip);
-  g.add(defs, sv("rect", { width: g.W, height: g.H, rx: 12, fill: "var(--surface-2)" }));
-  if (mappa) g.add(sv("image", { href: mappa.url, x: 0, y: 0, width: g.W, height: g.H, preserveAspectRatio: "none", "clip-path": `url(#${idClip})` }));
-  g.add(sv("polyline", { points: punti(0, t.length - 1), fill: "none", stroke: "var(--surface)", "stroke-width": "8", "stroke-linecap": "round", "stroke-linejoin": "round" }));
+  const scena = sv("g", { "clip-path": `url(#${idClip})` }), contenuto = sv("g");
+  scena.append(contenuto);
+  g.add(defs, sv("rect", { width: g.W, height: g.H, rx: 12, fill: "var(--surface-2)" }), scena);
+  if (mappa) contenuto.append(sv("image", { href: mappa.url, x: 0, y: 0, width: g.W, height: g.H, preserveAspectRatio: "none" }));
+  const linea = { fill: "none", "stroke-linecap": "round", "stroke-linejoin": "round", "vector-effect": "non-scaling-stroke" };
+  contenuto.append(sv("polyline", { points: punti(0, t.length - 1), stroke: "var(--surface)", "stroke-width": "8", ...linea }));
   for (let da = 0, i = 1; i <= t.length; i++) {
     if (i < t.length && zonaA(i) === zonaA(da)) continue;
     const zz = zonaA(da);
-    g.add(sv("polyline", { points: punti(da, Math.min(i, t.length - 1)), fill: "none", stroke: zz < 0 ? "var(--ink)" : COLORE_ZONA[zz], "stroke-width": "4", "stroke-linecap": "round", "stroke-linejoin": "round" }));
+    contenuto.append(sv("polyline", { points: punti(da, Math.min(i, t.length - 1)), stroke: zz < 0 ? "var(--ink)" : COLORE_ZONA[zz], "stroke-width": "4", ...linea }));
     da = i;
   }
+  const vista = { s: 1, tx: 0, ty: 0 };
+  const sx = (x) => x * vista.s + vista.tx, sy = (y) => y * vista.s + vista.ty; // dalla traccia allo schermo
   const fine = t.length - 1;
-  g.add(sv("rect", { x: px(fine) - 6, y: py(fine) - 6, width: 12, height: 12, rx: 2, fill: "var(--ink)", stroke: "var(--surface)", "stroke-width": "2" }),
-    sv("circle", { cx: px(0), cy: py(0), r: 7, fill: "var(--surface)", stroke: "var(--ink)", "stroke-width": "3" }));
+  const arrivo = sv("rect", { width: 12, height: 12, rx: 2, fill: "var(--ink)", stroke: "var(--surface)", "stroke-width": "2" });
+  const partenza = sv("circle", { r: 7, fill: "var(--surface)", stroke: "var(--ink)", "stroke-width": "3" });
+  scena.append(arrivo, partenza); // dentro il ritaglio: con la mappa ingrandita possono finire fuori vista
   g.add(sv("rect", { x: g.W - 36, y: 8, width: 28, height: 40, rx: 4, fill: "var(--surface)", "fill-opacity": "0.9" }),
     sv("path", { d: `M${g.W - 28},${30}l6,-16l6,16l-6,-4z`, fill: "var(--ink)" }),
     sv("text", { x: g.W - 22, y: 43, "text-anchor": "middle", style: "fill:var(--ink);font-weight:800" }, "N"));
-  const pxPerM = k / metriPerPixel(lat[Math.floor(lat.length / 2)], z);
-  const metri = [50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000].find((d) => d * pxPerM >= 50) ?? 50000;
-  const lx = metri * pxPerM, etichetta = metri >= 1000 ? `${metri / 1000} km` : `${metri} m`;
-  g.add(sv("rect", { x: 8, y: g.H - 30, width: lx + 64, height: 22, rx: 4, fill: "var(--surface)", "fill-opacity": "0.9" }),
-    sv("path", { d: `M16,${g.H - 20}v5h${lx}v-5`, fill: "none", stroke: "var(--ink)", "stroke-width": "2" }),
-    sv("text", { x: 22 + lx, y: g.H - 14, style: "fill:var(--ink);font-weight:700" }, etichetta));
-
+  const pxPerMetro = k / metriPerPixel(lat[Math.floor(lat.length / 2)], z);
+  const fondoScala = sv("rect", { x: 8, y: g.H - 30, height: 22, rx: 4, fill: "var(--surface)", "fill-opacity": "0.9" });
+  const segnoScala = sv("path", { fill: "none", stroke: "var(--ink)", "stroke-width": "2" });
+  const testoScala = sv("text", { y: g.H - 14, style: "fill:var(--ink);font-weight:700" });
+  g.add(fondoScala, segnoScala, testoScala);
   const punto = sv("circle", { r: 6, fill: "var(--ink)", stroke: "var(--surface)", "stroke-width": "2", visibility: "hidden" });
-  g.add(punto);
+  scena.append(punto);
+  let iPunto = null;
+
+  const piu = el("button", { type: "button", "aria-label": "Ingrandisci la mappa" }, "+");
+  const meno = el("button", { type: "button", "aria-label": "Rimpicciolisci la mappa" }, "−");
+  const intera = el("button", { type: "button", "aria-label": "Mappa intera", hidden: true }, "⤢");
+  g.box.append(el("div", { class: "zoom-mappa" }, piu, meno, intera));
+
+  function applica() {
+    vista.s = Math.min(4, Math.max(1, vista.s));
+    vista.tx = Math.min(0, Math.max(g.W * (1 - vista.s), vista.tx));
+    vista.ty = Math.min(0, Math.max(g.H * (1 - vista.s), vista.ty));
+    contenuto.setAttribute("transform", `translate(${vista.tx} ${vista.ty}) scale(${vista.s})`);
+    arrivo.setAttribute("x", sx(px(fine)) - 6); arrivo.setAttribute("y", sy(py(fine)) - 6);
+    partenza.setAttribute("cx", sx(px(0))); partenza.setAttribute("cy", sy(py(0)));
+    if (iPunto != null) { punto.setAttribute("cx", sx(px(iPunto))); punto.setAttribute("cy", sy(py(iPunto))); }
+    const perM = pxPerMetro * vista.s;
+    const metri = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000].find((d) => d * perM >= 50) ?? 50000;
+    const lx = metri * perM;
+    fondoScala.setAttribute("width", lx + 64);
+    segnoScala.setAttribute("d", `M16,${g.H - 20}v5h${lx}v-5`);
+    testoScala.setAttribute("x", 22 + lx);
+    testoScala.textContent = metri >= 1000 ? `${metri / 1000} km` : `${metri} m`;
+    intera.hidden = vista.s < 1.01;
+    meno.disabled = vista.s < 1.01;
+    piu.disabled = vista.s > 3.99;
+  }
+  // Ingrandimento tenendo fermo il punto (cx, cy) dello schermo.
+  const zoomA = (s, cx, cy) => {
+    const bx = (cx - vista.tx) / vista.s, by = (cy - vista.ty) / vista.s;
+    vista.s = Math.min(4, Math.max(1, s));
+    vista.tx = cx - bx * vista.s;
+    vista.ty = cy - by * vista.s;
+    applica();
+  };
+  const tutta = () => { vista.s = 1; vista.tx = vista.ty = 0; applica(); };
+  piu.onclick = () => zoomA(vista.s * 1.6, g.W / 2, g.H / 2);
+  meno.onclick = () => zoomA(vista.s / 1.6, g.W / 2, g.H / 2);
+  intera.onclick = tutta;
+  applica();
+
+  let gesto = null, ultimoTocco = null;
+  const nascondiTip = () => { const tip = g.box.querySelector(".tip"); if (tip) tip.hidden = true; iPunto = null; punto.setAttribute("visibility", "hidden"); };
   sensibile(g, (mx, my) => {
+    if (gesto) return null;
+    const bx = (mx - vista.tx) / vista.s, by = (my - vista.ty) / vista.s;
     let migliore = 0, dMin = Infinity;
     for (let i = 0; i < t.length; i++) {
-      const d = (px(i) - mx) ** 2 + (py(i) - my) ** 2;
+      const d = (px(i) - bx) ** 2 + (py(i) - by) ** 2;
       if (d < dMin) { dMin = d; migliore = i; }
     }
-    punto.setAttribute("cx", px(migliore));
-    punto.setAttribute("cy", py(migliore));
+    iPunto = migliore;
+    punto.setAttribute("cx", sx(px(migliore)));
+    punto.setAttribute("cy", sy(py(migliore)));
     punto.setAttribute("visibility", "visible");
     const s = t[migliore], v = fcA(migliore), zz = zonaA(migliore);
-    return { x: px(migliore), y: py(migliore), titolo: `${Math.floor(s / 3600)}:${String(Math.floor((s % 3600) / 60)).padStart(2, "0")} dalla partenza`,
+    return { x: sx(px(migliore)), y: sy(py(migliore)), titolo: `${Math.floor(s / 3600)}:${String(Math.floor((s % 3600) / 60)).padStart(2, "0")} dalla partenza`,
       righe: v == null ? [[null, "Battito", "—"]] : [[COLORE_ZONA[zz], "Battito", `${v} bpm`], [null, "Zona", ZONE[zz]]] };
-  }, () => punto.setAttribute("visibility", "hidden"));
+  }, () => { iPunto = null; punto.setAttribute("visibility", "hidden"); });
+
+  // Gesti con le dita: due dita ingrandiscono (attorno al punto in mezzo), un dito sposta la mappa ingrandita.
+  const qui = (tc) => { const r = g.svg.getBoundingClientRect(); return { x: ((tc.clientX - r.left) / r.width) * g.W, y: ((tc.clientY - r.top) / r.height) * g.H }; };
+  const unDito = (q, mosso = false) => ({ tipo: "uno", x: q.x, y: q.y, tx: vista.tx, ty: vista.ty, mosso });
+  g.svg.addEventListener("touchstart", (e) => {
+    const tocchi = [...e.touches].map(qui);
+    if (tocchi.length >= 2) {
+      e.preventDefault();
+      nascondiTip();
+      const [a, b] = tocchi;
+      gesto = { tipo: "due", d: Math.hypot(a.x - b.x, a.y - b.y) || 1, s: vista.s, bx: ((a.x + b.x) / 2 - vista.tx) / vista.s, by: ((a.y + b.y) / 2 - vista.ty) / vista.s };
+    } else if (vista.s > 1) {
+      e.preventDefault();
+      gesto = unDito(tocchi[0]);
+    }
+  }, { passive: false });
+  g.svg.addEventListener("touchmove", (e) => {
+    if (!gesto) return;
+    e.preventDefault();
+    const tocchi = [...e.touches].map(qui);
+    if (gesto.tipo === "due" && tocchi.length >= 2) {
+      const [a, b] = tocchi;
+      vista.s = Math.min(4, Math.max(1, (gesto.s * Math.hypot(a.x - b.x, a.y - b.y)) / gesto.d));
+      vista.tx = (a.x + b.x) / 2 - gesto.bx * vista.s;
+      vista.ty = (a.y + b.y) / 2 - gesto.by * vista.s;
+      applica();
+    } else if (gesto.tipo === "uno" && tocchi.length) {
+      const dx = tocchi[0].x - gesto.x, dy = tocchi[0].y - gesto.y;
+      if (Math.hypot(dx, dy) > 4) { if (!gesto.mosso) nascondiTip(); gesto.mosso = true; }
+      vista.tx = gesto.tx + dx;
+      vista.ty = gesto.ty + dy;
+      applica();
+    }
+  }, { passive: false });
+  g.svg.addEventListener("touchend", (e) => {
+    const era = gesto;
+    if (e.touches.length === 1 && vista.s > 1) { gesto = unDito(qui(e.touches[0]), true); return; }
+    if (e.touches.length) return;
+    gesto = null;
+    // Doppio tocco: ingrandisce 2× lì, oppure torna alla mappa intera.
+    const p = e.changedTouches[0] ? qui(e.changedTouches[0]) : null;
+    if (!p || era?.tipo === "due" || era?.mosso) { ultimoTocco = null; return; }
+    const ora = Date.now();
+    if (ultimoTocco && ora - ultimoTocco.t < 320 && Math.hypot(p.x - ultimoTocco.x, p.y - ultimoTocco.y) < 30) {
+      e.preventDefault();
+      nascondiTip();
+      if (vista.s > 1.5) tutta(); else zoomA(vista.s * 2, p.x, p.y);
+      ultimoTocco = null;
+    } else ultimoTocco = { t: ora, x: p.x, y: p.y };
+  });
 
   const zonePresenti = [...new Set(t.map((_, i) => zonaA(i)))].sort();
   legenda(contenitore, [...zonePresenti.map((zz) => (zz < 0 ? ["var(--ink)", "Senza battito"] : [COLORE_ZONA[zz], ZONE[zz]])),
