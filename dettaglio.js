@@ -48,9 +48,10 @@ export function voceSessione(s) {
 
 const CAMPI_MODIFICABILI = [["durata_min", "Durata (min)"], ["km", "Km"], ["salita_m", "Salita (m)"], ["fc_media", "FC media"], ["fc_max", "FC massima"]];
 
-// Telefono senza barometro: dislivello e curva della quota si rifanno con le quote del terreno lungo la traccia (serve
-// la rete; si spegne insieme alle mappe). Vale per le registrazioni dell'app con la quota del GPS, una volta sola.
-export const daCorreggere = (s) => CARDIO.includes(s?.tipo) && s.fonte === "Registrata con l'app" && (s.salita_da === "gps" || s.salita_da == null);
+// Dislivello e curva della quota dalle quote del terreno lungo la traccia (serve la rete; si spegne insieme alle mappe),
+// una volta sola: per le registrazioni dell'app fatte senza barometro e per i file senza quota.
+export const daCorreggere = (s) => CARDIO.includes(s?.tipo) && (s.fonte === "Registrata con l'app" ? s.salita_da === "gps" || s.salita_da == null
+  : /^File/.test(s.fonte ?? "") && s.salita_m == null && s.km > 0); // per esempio i TCX di Mi Fitness
 export async function correggiDislivello(s) {
   if (!daCorreggere(s) || !mappeAttive()) return null;
   const d = (await stato.archivio.leggi("dettagli", s.id)) ?? {};
@@ -224,7 +225,7 @@ async function caricaPesanti(s, box, lim, aggiornaSalita) {
     ["cadenza", "Cadenza", "var(--t-corsa)", (v) => `${fmtNum(v)}`],
   ].filter((x) => x && c[x[0]]) : [];
   const fonteQuota = { barometro: "Quota dal barometro del telefono.",
-    terreno: "Quota del terreno lungo la traccia (Terrain Tiles su AWS, dati EU-DEM e SRTM): il telefono non ha il barometro e il GPS in verticale sbaglia troppo.",
+    terreno: "Quota del terreno lungo la traccia (Terrain Tiles su AWS, dati EU-DEM e SRTM): la quota misurata mancava o non era affidabile.",
     gps: "Quota dal GPS del telefono: il dislivello è calcolato sulla quota lisciata, perché il GPS in verticale sbaglia di qualche metro." }[s.salita_da];
   for (const [k, nome, colore, formato] of extra) {
     const g = el("div");

@@ -308,8 +308,11 @@ export async function salvaRiassunto(r, param = {}, presi = new Set()) {
   await stato.archivio.scrivi("dettagli", id, Object.fromEntries(CAMPI_DETTAGLIO.map((c) => [c, r[c] ?? null])));
   if (r.traccia) {
     if (stessa) await eliminaMappa(id); // la traccia può essere cambiata
-    if (param.mappa !== false) scaricaMappa(id, r.traccia).catch(() => { /* riprova aprendo l'allenamento */ });
-    if (doc.salita_da === "gps") correggiDislivello({ ...doc, id }).catch(() => { /* riprova aprendo l'allenamento */ });
+    // Mappa e, se serve (niente barometro, file senza quota), dislivello dal terreno; altrimenti aprendo l'allenamento.
+    if (param.mappa !== false) {
+      scaricaMappa(id, r.traccia).catch(() => {});
+      correggiDislivello({ ...doc, id }).catch(() => {});
+    }
   }
   return id;
 }
