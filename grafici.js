@@ -1,6 +1,6 @@
 // Grafici SVG. Ogni grafico parte da pianoGrafico() e usa gli stessi pezzi:
 // tacche(), asseY(), etichetteDate(), sensibile() per il riquadro informativo, legenda().
-import { el, sv, ms, fmtData } from "./util.js";
+import { el, sv, ms, fmtData, fmtNum } from "./util.js";
 import { zonaDi, mondo, metriPerPixel } from "./analisi-file.js";
 
 export const ZONE = ["Z1", "Z2", "Z3", "Z4", "Z5"];
@@ -207,6 +207,45 @@ export function graficoLinea(contenitore, { punti, formato, soglia, etichettaSog
     croce.setAttribute("visibility", "visible");
     return { x: x(p.data), y: y(p.v), titolo: titoloTip(p), righe: [[null, formato.nome, formato.tip(p.v)], ...(p.extra ?? [])] };
   }, () => croce.setAttribute("visibility", "hidden"));
+}
+
+// Forma di fondo e fatica giorno per giorno: stessa unità (punti di carico), quindi un solo asse; bilancio e carico
+// del giorno nel riquadro informativo. Valori scritti sull'ultimo giorno, legenda sotto.
+const conSegno = (v) => { const n = Math.round(v); return (n > 0 ? "+" : "") + fmtNum(n); };
+export function graficoForma(contenitore, { giorni, titoloTip }) {
+  if (giorni.length < 2) return vuoto(contenitore, "Serve qualche giorno di allenamenti per disegnare l'andamento.");
+  const g = pianoGrafico(contenitore, { m: { t: 14, r: 34, b: 26, l: 34 } });
+  const date = giorni.map((p) => p.data);
+  const x = scalaDate(g, date);
+  const ticks = tacche(0, Math.max(10, ...giorni.flatMap((p) => [p.forma, p.fatica])));
+  const top = ticks[ticks.length - 1];
+  const y = (v) => g.m.t + g.ih - (v / top) * g.ih;
+  asseY(g, ticks, y, (v) => fmtNum(v));
+  etichetteDate(g, date, x);
+  const SERIE = [["fatica", "var(--fatica)"], ["forma", "var(--forma)"]];
+  for (const [k, colore] of SERIE)
+    g.add(sv("path", { d: giorni.map((p, i) => `${i ? "L" : "M"}${x(p.data).toFixed(1)},${y(p[k]).toFixed(1)}`).join(""), fill: "none", stroke: colore, "stroke-width": "2", "stroke-linejoin": "round", "stroke-linecap": "round" }));
+  // Ultimo giorno: punto e valore; se le linee sono vicine le due scritte si allontanano.
+  const u = giorni[giorni.length - 1];
+  const yF = y(u.forma), yA = y(u.fatica), stacco = Math.max(0, (14 - Math.abs(yF - yA)) / 2);
+  for (const [k, colore] of SERIE) {
+    const yy = k === "forma" ? yF : yA;
+    const sopra = k === "forma" ? yF <= yA : yA < yF;
+    g.add(sv("circle", { cx: x(u.data), cy: yy, r: 4, fill: colore, stroke: "var(--surface)", "stroke-width": "2" }),
+      sv("text", { x: x(u.data) + 7, y: yy + 4 + (sopra ? -stacco : stacco), "text-anchor": "start", style: "fill:var(--ink);font-weight:700" }, fmtNum(u[k])));
+  }
+  const croce = sv("line", { y1: g.m.t, y2: g.m.t + g.ih, stroke: "var(--faint)", "stroke-width": "1", visibility: "hidden" });
+  g.add(croce);
+  sensibile(g, (px) => {
+    const p = vicino(giorni, (q) => x(q.data), px);
+    croce.setAttribute("x1", x(p.data));
+    croce.setAttribute("x2", x(p.data));
+    croce.setAttribute("visibility", "visible");
+    return { x: x(p.data), y: y(Math.max(p.forma, p.fatica)), titolo: titoloTip(p), righe: [
+      ["var(--forma)", "Forma di fondo", fmtNum(p.forma)], ["var(--fatica)", "Fatica", fmtNum(p.fatica)],
+      [null, "Bilancio", conSegno(p.bilancio)], [null, "Carico del giorno", p.carico ? fmtNum(p.carico) : "riposo"]] };
+  }, () => croce.setAttribute("visibility", "hidden"));
+  legenda(contenitore, [["var(--forma)", "Forma di fondo"], ["var(--fatica)", "Fatica"]]);
 }
 
 // Per ogni notte: barra dalla minima alla massima, tacca sulla minima, punto sulla media.

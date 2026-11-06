@@ -9,7 +9,7 @@ import { CARDIO, statoVoci, vociDelGiorno } from "./dati.js";
 import { el, metti, oggi, fmtNum, fmtSec, fmtPasso, numero, avviso, esito, conConferma, ricorda, opzione, campo } from "./util.js";
 import { Registratore } from "./registratore.js";
 import { disponibile, avviaGps, collegaFascia, schermoAcceso, permessoNotifiche, apriImpostazioniPosizione, nativo, avviaBarometro, haBarometro, notificaZona } from "./sorgenti.js";
-import { metriche, barraZone, apriDettaglio } from "./dettaglio.js";
+import { metriche, barraZone, apriDettaglio, sceltaFatica, AIUTO_FATICA } from "./dettaglio.js";
 import { salvaRiassunto, iniziaForza } from "./registra.js";
 import { contenutoScheda, riassuntoScheda } from "./schede.js";
 import { impostazioniDa, eserciziDelGiro, fasiHiit, durataFasi, statoTimer, inizioFaseDopo, segnaliHiit } from "./timer-hiit.js";
@@ -498,6 +498,8 @@ async function finisci(t, { naturale = false } = {}) {
 function schermataFine(main) {
   const r = s.riassunto, hiit = s.extra?.hiit;
   const nota = el("textarea", { id: "dv-nota", placeholder: "Sensazioni, percorso, meteo…" });
+  let fatica = null;
+  const selFatica = sceltaFatica("dv-fatica", null, (v) => (fatica = v));
   // Cardio senza GPS (in casa, GPS spento): la distanza si può scrivere.
   const km = CARDIO.includes(r.tipo) && !r.km ? el("input", { id: "dv-km", inputmode: "decimal", placeholder: "facoltativa" }) : null;
   const esitoF = el("span", { class: "esito", role: "status" });
@@ -507,7 +509,7 @@ function schermataFine(main) {
     try {
       const k = km ? numero(km.value) : null;
       if (k > 0) Object.assign(r, { km: k, vel_media: r.durata_min ? Math.round((k / r.durata_min) * 600) / 10 : null });
-      const id = await salvaRiassunto(r, { voce: { tipo: r.tipo, scheda: s.scelta?.scheda ?? null }, nota: nota.value.trim(), extra: s.extra });
+      const id = await salvaRiassunto(r, { voce: { tipo: r.tipo, scheda: s.scelta?.scheda ?? null }, nota: nota.value.trim(), extra: { ...s.extra, fatica } });
       s = null;
       avviso("Allenamento salvato");
       vai("oggi");
@@ -527,6 +529,6 @@ function schermataFine(main) {
       el("p", { class: "sotto num" }, metriche(r)),
       barraZone(r),
       vuota ? el("p", { class: "esito err" }, "Registrazione molto corta: forse non vale la pena salvarla.") : null),
-    el("section", { class: "card modulo" }, km ? campo("Distanza (km)", km, "Senza GPS non l'ho misurata: scrivila se la sai.") : null, el("label", { class: "campo" }, el("span", {}, "Nota"), nota)),
+    el("section", { class: "card modulo" }, km ? campo("Distanza (km)", km, "Senza GPS non l'ho misurata: scrivila se la sai.") : null, campo("Fatica percepita", selFatica, AIUTO_FATICA), el("label", { class: "campo" }, el("span", {}, "Nota"), nota)),
     el("div", { class: "azioni" }, salva, scarta, esitoF));
 }

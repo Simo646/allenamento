@@ -3,7 +3,8 @@ import { stato, registraVista, rivai, testata, coloreTipo, nomeTipo, modulo, lim
 import { recupero, CARDIO, testoSerie } from "./dati.js";
 import { TIPI, volume, massimale } from "./analisi-file.js";
 import { el, metti, oggi, piuGiorni, lunediDi, fmtData, fmtGiorno, fmtNum, fmtDur, fmtKg, fmtSec, somma } from "./util.js";
-import { COLORE_ZONA, graficoColonne, graficoLinea, graficoIntervalli, vuoto } from "./grafici.js";
+import { COLORE_ZONA, graficoColonne, graficoLinea, graficoIntervalli, graficoForma, vuoto } from "./grafici.js";
+import { andamentoForma, giudizioForma, caricoSessione } from "./carico.js";
 import { zoneDi, haZone, conPasso, volumeSessione, apriDettaglio } from "./dettaglio.js";
 import { recordPersonali } from "./record.js";
 
@@ -49,6 +50,25 @@ registraVista("analisi", { vivo: true, render(main) {
       el("p", { class: "sotto" }, "Di sempre, non solo nel periodo scelto. Tocca un record per aprire l'allenamento."), sel,
       el("div", { class: "gruppo-record" }, g.righe.map(([nome, valore, r]) => el("button", { type: "button", class: "riga-record", onclick: () => apriDettaglio(r.id) },
         el("span", {}, nome, el("small", {}, fmtData(r.data, { day: "numeric", month: "short", year: "numeric" }))), el("b", { class: "num" }, valore))))));
+  }
+
+  // Carico e forma (modello di Banister): ultimo giorno nei riquadri, andamento del periodo nel grafico.
+  const forma = andamentoForma(stato.sessioni, d);
+  if (forma.length) {
+    const u = forma[forma.length - 1];
+    const giudizio = giudizioForma(u, forma.length);
+    const stimati = sess.filter((s) => caricoSessione(s).da === "stima").length;
+    const segno = (v) => { const n = Math.round(v); return (n > 0 ? "+" : "") + fmtNum(n); };
+    const tile = (k, v, colore) => el("div", { class: "tile" }, el("small", {}, colore ? el("i", { class: "dot", style: `background:${colore}` }) : null, k), el("b", { class: "num" }, v));
+    const g = el("div");
+    sezioni.push(el("section", { class: "card" }, el("h2", {}, "Carico e forma"),
+      el("div", { class: "tiles riquadri", style: "grid-template-columns:repeat(3,minmax(0,1fr))" },
+        tile("Forma di fondo", fmtNum(u.forma), "var(--forma)"), tile("Fatica", fmtNum(u.fatica), "var(--fatica)"), tile("Bilancio", segno(u.bilancio))),
+      el("p", { class: "giudizio-forma " + giudizio.livello }, el("b", {}, giudizio.stato), giudizio.testo),
+      g,
+      el("p", { class: "sotto" }, "Carico dal tempo in zona (le zone alte pesano di più); per la forza e senza fascia dalla fatica percepita. Forma di fondo: ultime 6 settimane; fatica: ultima settimana. È una tendenza, non una misura precisa."
+        + (stimati ? ` ${stimati === 1 ? "Un allenamento del periodo ha" : `${stimati} allenamenti del periodo hanno`} il carico stimato: segna la fatica percepita per renderlo più preciso.` : ""))));
+    disegni.push(() => graficoForma(g, { giorni: forma.filter((p) => p.data >= primo), titoloTip: (p) => fmtGiorno(p.data) }));
   }
 
   // Minuti per tipo

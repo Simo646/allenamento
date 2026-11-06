@@ -11,6 +11,7 @@
   --t-forza:#c99a00; --t-hiit:#c8429a; --t-corsa:#2b8a3e; --t-camminata:#0e93a0; --t-trekking:#a0581f; --t-bici:#6c4ce0; --t-altro:#8a939c;
   --z1:#9aa1a9; --z2:#2f80d1; --z3:#2e9e4f; --z4:#f08c1a; --z5:#d93025;
   --z1-ink:#0a0a0a; --z2-ink:#ffffff; --z3-ink:#ffffff; --z4-ink:#0a0a0a; --z5-ink:#ffffff;
+  --forma:#2f80d1; --fatica:#c8590a;
   --serie:#2c3e57; --sonno:#2563c9; --o2-max:#ee9a90; --o2-media:#dc4b43; --o2-min:#9e1f1a; --band-alpha:.28;
   --tratteggio:repeating-linear-gradient(45deg,var(--faint) 0 1.5px,var(--surface-2) 1.5px 4.5px);
   --velo:rgba(10,10,10,.5);
@@ -30,6 +31,7 @@
   --ok:#5fc46a; --ok-bg:#132a17; --warn:#e8b64c; --warn-bg:#33270b; --crit:#ff6a5f; --crit-text:#ff8a80; --crit-bg:#3a1513;
   --t-bici:#8c72ff; --t-trekking:#c9773a;
   --serie:#9fbbe0; --sonno:#6f9ff0; --band-alpha:.34;
+  --forma:#4f93e0; --fatica:#d9761f;
   --velo:rgba(0,0,0,.65);
 }
 :root[data-tema="scuro"] .grafico image{filter:brightness(.82)}
@@ -398,3 +400,9 @@ body.con-barra .schede-nav{display:none}
 .riga-record b{flex:none;font-family:var(--font-ui);font-size:18px;font-weight:700}
 .record-badge{margin:0;padding:10px 12px;border-radius:var(--r);background:var(--warn-bg);font-size:14px}
 .record-badge b{display:block;font-family:var(--font-ui);font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--warn)}
+/* Carico e forma (Analisi) */
+.giudizio-forma{margin:0;font-size:14px}
+.giudizio-forma b{font-family:var(--font-ui);font-size:15px;letter-spacing:.06em;text-transform:uppercase;margin-right:6px}
+.giudizio-forma.ok b{color:var(--ok)}
+.giudizio-forma.warn b{color:var(--warn)}
+.tile small .dot{margin-right:4px}

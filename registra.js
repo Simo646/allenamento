@@ -4,7 +4,7 @@ import { precompilaEsercizio, vociDelGiorno, ESERCIZI, testoSerie } from "./dati
 import { riassumiFit, riassumiXml, idSessione, CAMPI_FILE, CAMPI_DETTAGLIO, TIPI, SOTTOTIPI_BICI, volume } from "./analisi-file.js";
 import { $, el, metti, icona, ICONE, oggi, fmtData, fmtGiorno, fmtNum, fmtKg, fmtSec, numero, avviso, esito, ricorda, conConferma, campo, opzione, testoKg } from "./util.js";
 import { caricaLettoreFit } from "./lettore-fit.js";
-import { metriche, barraZone, correggiDislivello } from "./dettaglio.js";
+import { metriche, barraZone, correggiDislivello, sceltaFatica, AIUTO_FATICA } from "./dettaglio.js";
 import { contenutoScheda, riassuntoScheda } from "./schede.js";
 import { Registratore } from "./registratore.js";
 import { disponibile, collegaFascia, schermoAcceso } from "./sorgenti.js";
@@ -64,7 +64,7 @@ function moduloForza(main, param) {
   const schedeForza = Object.entries(stato.schede).filter(([, s]) => s.tipo === "Forza");
   let b = param.bozza;
   if (!b && esistente) {
-    b = { data: esistente.data, scheda: esistente.scheda ?? null, inizioMs: null, durata: esistente.durata_min ?? null, fc_media: esistente.fc_media ?? null, fc_max: esistente.fc_max ?? null, nota: esistente.nota ?? "",
+    b = { data: esistente.data, scheda: esistente.scheda ?? null, inizioMs: null, durata: esistente.durata_min ?? null, fc_media: esistente.fc_media ?? null, fc_max: esistente.fc_max ?? null, nota: esistente.nota ?? "", fatica: esistente.fatica ?? null,
       esercizi: (esistente.esercizi ?? []).map((e) => ({ nome: e.nome, recupero_s: e.recupero_s ?? null, unita: e.unita ?? null, ultima: null, serie: (e.serie ?? []).map((s) => ({ kg: s.kg ?? null, rip: s.rip ?? null, sec: s.sec ?? null, fatta: true })) })) };
   }
   if (!b && param.riprendi) { b = ricorda.leggi("bozza-forza"); if (b && b.vivo === undefined) b.vivo = !!b.inizioMs; } // le bozze delle versioni 1.0 non avevano `vivo`
@@ -201,7 +201,7 @@ function moduloForza(main, param) {
       // Con la fascia collegata: battito medio e massimo, zone e curva misurati invece di quelli scritti a mano.
       const misure = !esistente && fasciaForza?.rec.punti.length > 30 ? fasciaForza.rec.riassunto(limiti(), Date.now()) : null;
       const battito = misure ? { fc_media: misure.fc_media, fc_max: misure.fc_max, z1_min: misure.z1_min, z2_min: misure.z2_min, z3_min: misure.z3_min, z4_min: misure.z4_min, z5_min: misure.z5_min, rmssd_ms: misure.rmssd_ms } : {};
-      const base = { tipo: "Forza", data: b.data, scheda: b.scheda, esercizi: lista, durata_min: durata, fc_media: b.fc_media, fc_max: b.fc_max, nota: (b.nota ?? "").trim(), ...battito };
+      const base = { tipo: "Forza", data: b.data, scheda: b.scheda, esercizi: lista, durata_min: durata, fc_media: b.fc_media, fc_max: b.fc_max, fatica: b.fatica ?? null, nota: (b.nota ?? "").trim(), ...battito };
       // Se quel giorno c'è già una forza importata da file senza esercizi, le serie vanno lì (battito e zone restano).
       const daFile = !esistente && !misure && stato.sessioni.find((s) => s.data === b.data && s.tipo === "Forza" && !s.esercizi?.length);
       const doc = esistente ?? daFile;
@@ -240,6 +240,7 @@ function moduloForza(main, param) {
       el("datalist", { id: "fz-elenco" }, [...nomi].sort((x, y) => x.localeCompare(y)).map((n) => el("option", { value: n })))),
     el("section", { class: "card modulo" }, el("h2", {}, "Durata, battito e note"),
       el("div", { class: "righe" }, num("durata", "Durata (min)", "fz-durata", b.vivo ? "dal cronometro" : ""), num("fc_media", "FC media", "fz-fcm"), num("fc_max", "FC massima", "fz-fcx")),
+      campo("Fatica percepita", sceltaFatica("fz-fatica", b.fatica ?? null, (v) => { b.fatica = v; memorizza(); }), AIUTO_FATICA),
       campo("Nota", nota), esitoF));
 
   const barra = $("barra-fondo");
@@ -428,6 +429,8 @@ function formManuale(param) {
   disegna();
   const campi = { durata_min: inp("m-durata"), km: inp("m-km"), salita_m: inp("m-salita"), fc_media: inp("m-fcm"), fc_max: inp("m-fcx") };
   const nota = el("textarea", { id: "m-nota" });
+  let fatica = null;
+  const selFatica = sceltaFatica("m-fatica", null, (v) => (fatica = v));
   const esitoM = el("span", { class: "esito", role: "status" });
   const salva = el("button", { type: "button", class: "btn primario" }, "Salva");
   salva.onclick = async () => {
@@ -439,7 +442,7 @@ function formManuale(param) {
       const schedaVoce = idScheda ? stato.schede[idScheda] : null;
       const id = idSessione(data.value, v.tipo, occupato);
       await stato.archivio.scrivi("sessioni", id, { data: data.value, tipo: v.tipo, sottotipo: v.tipo === "Bici" ? v.sottotipo : null, nome: schedaVoce?.titolo ?? "", scheda: idScheda,
-        ...valori, z1_min: null, z2_min: null, z3_min: null, z4_min: null, z5_min: null, nota: nota.value.trim(), fonte: "Inserito a mano" });
+        ...valori, z1_min: null, z2_min: null, z3_min: null, z4_min: null, z5_min: null, fatica, nota: nota.value.trim(), fonte: "Inserito a mano" });
       avviso("Allenamento salvato");
       vai("allenamenti");
     } catch (e) { esito(esitoM, "Non salvato: " + (e?.message ?? "errore"), "err"); salva.disabled = false; }
@@ -448,6 +451,7 @@ function formManuale(param) {
     el("fieldset", { class: "campo" }, el("legend", {}, "Attività"), tipi), campoSotto,
     el("div", { class: "righe" }, campo("Giorno", data), campo("Durata (min) *", campi.durata_min)),
     el("div", { class: "righe" }, campo("Distanza (km)", campi.km), campo("Salita (m)", campi.salita_m), campo("FC media", campi.fc_media), campo("FC massima", campi.fc_max)),
+    campo("Fatica percepita", selFatica, AIUTO_FATICA),
     campo("Nota", nota),
     el("p", { class: "sotto" }, "Senza file non ci sono traccia, curva del battito e tempo in zona. Per la forza si apre la scheda serie per serie."),
     el("div", { class: "azioni" }, salva, esitoM));

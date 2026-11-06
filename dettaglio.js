@@ -7,6 +7,7 @@ import { COLORE_ZONA, graficoTraccia, graficoCurva, graficoTempo, creaCursore } 
 import { leggiMappa, scaricaMappa, eliminaMappa, mappeAttive, quotaDalTerreno } from "./mappe.js";
 import { testoSerie, CARDIO } from "./dati.js";
 import { recordDi } from "./record.js";
+import { caricoSessione, FATICA } from "./carico.js";
 
 export const zoneDi = (s) => [s.z1_min, s.z2_min, s.z3_min, s.z4_min, s.z5_min];
 export const haZone = (s) => zoneDi(s).some((z) => z != null);
@@ -85,6 +86,7 @@ export function apriDettaglio(id) {
     ["Potenza media", s.potenza_media, "W"], ["Potenza normalizzata", s.potenza_np, "W"],
     ["Calorie", s.calorie, "kcal"], ["Temperatura", s.temp_media, "°C"], ["Variabilità (RMSSD)", s.rmssd_ms, "ms"],
     s.esercizi?.length ? ["Volume", fmtNum(volumeSessione(s)), "kg"] : null,
+    (() => { const c = caricoSessione(s); return c.carico ? [c.da === "stima" ? "Carico (stima)" : "Carico", fmtNum(c.carico), "pt"] : null; })(),
   ].filter((c) => c && c[1] != null);
   // Griglia senza buchi: l'ultimo campo si allarga sulle colonne rimaste vuote.
   const colonne = campi.length === 4 ? 2 : Math.min(3, campi.length);
@@ -131,13 +133,15 @@ export function apriDettaglio(id) {
   const nota = el("textarea", { id: "d-nota" });
   nota.value = s.nota ?? "";
   const numeri = Object.fromEntries(CAMPI_MODIFICABILI.map(([k]) => [k, el("input", { id: "d-" + k, type: "text", inputmode: "decimal", value: s[k] ?? "" })]));
+  let fatica = s.fatica ?? null;
+  const selFatica = sceltaFatica("d-fatica", fatica, (v) => (fatica = v));
   const esitoD = el("span", { class: "esito", role: "status" });
   const salva = el("button", { class: "btn primario", type: "button" }, "Salva le modifiche");
   salva.onclick = async () => {
     salva.disabled = true;
     try {
       const nuovo = { ...s, nome: nome.value.trim(), nota: nota.value.trim(), tipo: tipo.value, sottotipo: tipo.value === "Bici" ? sottotipo.value || null : null,
-        ...Object.fromEntries(CAMPI_MODIFICABILI.map(([k]) => [k, numero(numeri[k].value)])) };
+        ...Object.fromEntries(CAMPI_MODIFICABILI.map(([k]) => [k, numero(numeri[k].value)])), fatica };
       await stato.archivio.scrivi("sessioni", s.id, nuovo);
       esito(esitoD, "Salvato", "ok");
     } catch (e) { esito(esitoD, "Non salvato: " + (e?.message ?? "errore"), "err"); }
@@ -163,6 +167,7 @@ export function apriDettaglio(id) {
       campo("Nome", nome),
       el("div", { class: "righe" }, campo("Tipo", tipo), campoSotto),
       el("div", { class: "righe" }, CAMPI_MODIFICABILI.map(([k, etichetta]) => campo(etichetta, numeri[k]))),
+      campo("Fatica percepita", selFatica, AIUTO_FATICA),
       campo("Nota", nota),
       el("div", { class: "azioni" }, salva, elimina, esitoD),
       s.fonte ? el("p", { class: "fonte" }, s.fonte + (s.file ? ` · ${s.file}` : "")) : null));
@@ -173,6 +178,11 @@ export function apriDettaglio(id) {
   const tileSalita = [...(riquadri?.children ?? [])].find((t) => t.querySelector("small")?.textContent === "Salita");
   caricaPesanti(s, pesanti, lim, (v) => { const b = tileSalita?.querySelector("b"); if (b?.firstChild) b.firstChild.textContent = fmtNum(v); });
 }
+
+// Fatica percepita da 1 a 10 (scala di Borg CR10): serve al carico di allenamento quando il battito non basta.
+export const AIUTO_FATICA = "Quanto ti è sembrato duro, da 1 a 10. Serve al carico di allenamento, soprattutto per la forza e senza fascia.";
+export const sceltaFatica = (id, valore, cambia) => el("select", { id, onchange: (e) => cambia(e.target.value ? Number(e.target.value) : null) },
+  el("option", { value: "" }, "Non indicata"), FATICA.map(([n, t]) => el("option", { value: n, selected: valore === n }, t ? `${n} · ${t}` : String(n))));
 
 // Riquadro dei record personali che questo allenamento detiene ancora.
 function recordBox(s) {
