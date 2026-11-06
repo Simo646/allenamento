@@ -1,6 +1,6 @@
 // Avvio dell'app, vista Oggi ed elenco degli allenamenti. Le altre viste stanno nei loro moduli e si registrano da sole.
 import { stato, avvia, registraVista, vai, programmaRender, testata, coloreTipo, nomeTipo, iconaTipo, chipZona, modulo, descriviVoce, intervalloZona } from "./stato.js";
-import { GIORNI, vociDelGiorno, statoVoci, recupero } from "./dati.js";
+import { GIORNI, vociDelGiorno, statoVoci, recupero, MISURE_RECUPERO } from "./dati.js";
 import { TIPI } from "./analisi-file.js";
 import { $, el, metti, icona, ICONE, oggi, piuGiorni, lunediDi, fmtData, fmtNum, fmtDur, fmtOre, somma, ricorda, applicaTema, conConferma, avviso, esito } from "./util.js";
 import { voceSessione, perData, metriche, apriDettaglio } from "./dettaglio.js";
@@ -184,7 +184,7 @@ function cardRecupero(d) {
   const r = sonno ? recupero(stato.notti, d, stato.profilo.recupero) : null;
   const PILL = { ok: ["ok", "Via libera"], attenzione: ["attenzione", "Battito alto"], riduci: ["riduci", "Riduci il carico"], manca: ["neutro", "Manca la notte"], senzaFc: ["neutro", "Manca il battito"], dati: ["neutro", "Media in costruzione"] };
   const tiles = [
-    sonno ? tile("Battito nel sonno", "fc_sonno", "bpm") : null,
+    sonno ? tile(MISURE_RECUPERO[r.misura].titolo, r.misura, "bpm") : null,
     sonno ? tile("Sonno", "durata_min", "h", fmtOre) : null,
     ossigeno ? tile("SpO₂ minima", "spo2_min", "%") : null,
     ossigeno && !sonno ? tile("SpO₂ media", "spo2_media", "%") : null,

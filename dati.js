@@ -149,24 +149,39 @@ export function precompilaEsercizio(esScheda, sessioni, data) {
 }
 
 /* ---------- recupero ---------- */
-// Battito nel sonno rispetto alla media personale delle notti precedenti: soglia = media + scarto.
-// Due notti di fila sopra la soglia → riduci il carico. Servono almeno 5 notti per avere una media.
+// Battito di stanotte rispetto alla media personale dei giorni precedenti: soglia = media + scarto.
+// Due giorni di fila sopra la soglia → riduci il carico. Servono almeno 5 valori per avere una media.
+// Due misure, mai mischiate: il battito nel sonno e, quando manca, il battito a riposo (per esempio da Health
+// Connect, se l'orologio non esporta il battito della notte). Ogni valore si confronta con la media della sua misura.
+export const MISURE_RECUPERO = {
+  fc_sonno: { nome: "battito nel sonno", titolo: "Battito nel sonno", giorni: "notti", stanotte: "stanotte", due: "Due notti col battito alto" },
+  fc_riposo: { nome: "battito a riposo", titolo: "Battito a riposo", giorni: "giorni", stanotte: "oggi", due: "Due giorni col battito a riposo alto" },
+};
 export function recupero(notti, data, { scarto_bpm = 3, notti: quante = 14 } = {}) {
-  const ord = notti.filter((n) => n.fc_sonno != null).sort((a, b) => b.data.localeCompare(a.data));
-  const stanotte = ord.find((n) => n.data === data);
-  const prima = ord.filter((n) => n.data < data).slice(0, quante);
-  if (prima.length < 5) return { stato: "dati", testo: `Servono almeno 5 notti per la tua media (ne hai ${prima.length}).`, media: null, soglia: null, stanotte };
-  const media = prima.reduce((a, n) => a + n.fc_sonno, 0) / prima.length;
+  const misure = Object.keys(MISURE_RECUPERO).map((k) => {
+    const ord = notti.filter((n) => n[k] != null).sort((a, b) => b.data.localeCompare(a.data));
+    return { k, ord, stanotte: ord.find((n) => n.data === data), prima: ord.filter((n) => n.data < data).slice(0, quante) };
+  });
+  const pronta = (m) => m.prima.length >= 5;
+  // Prima la misura di oggi con una media; poi quella di oggi; poi quella con il dato più recente.
+  const recente = (m) => m.prima[0]?.data ?? "";
+  const m = misure.find((x) => x.stanotte && pronta(x)) ?? misure.find((x) => x.stanotte)
+    ?? [...misure].sort((a, b) => Number(pronta(b)) - Number(pronta(a)) || recente(b).localeCompare(recente(a)))[0];
+  const { k, ord, stanotte, prima } = m;
+  const M = MISURE_RECUPERO[k];
+  const base = { misura: k, stanotte: stanotte ?? null, valore: stanotte?.[k] ?? null };
+  if (!pronta(m)) return { ...base, stato: "dati", testo: `Servono almeno 5 ${M.giorni} col ${M.nome} per la tua media (ne hai ${prima.length}).`, media: null, soglia: null };
+  const media = prima.reduce((a, n) => a + n[k], 0) / prima.length;
   const soglia = Math.round(media + scarto_bpm);
   // Notte registrata ma senza battito (per esempio importata con la sola durata): manca solo il battito.
   if (!stanotte) return notti.some((n) => n.data === data)
-    ? { stato: "senzaFc", testo: "Stanotte manca il battito nel sonno: serve per il controllo del recupero.", media, soglia, stanotte: null }
-    : { stato: "manca", testo: "Manca la notte di oggi.", media, soglia, stanotte: null };
+    ? { ...base, stato: "senzaFc", testo: `Manca il ${M.nome} di ${M.stanotte}: serve per il controllo del recupero.`, media, soglia }
+    : { ...base, stato: "manca", testo: "Manca la notte di oggi.", media, soglia };
   const ieri = ord.find((n) => n.data === giornoPrima(data));
-  const alta = (n) => n && n.fc_sonno >= soglia;
-  if (alta(stanotte) && alta(ieri)) return { stato: "riduci", testo: "Due notti col battito alto: riduci il carico oggi e domani.", media, soglia, stanotte };
-  if (alta(stanotte)) return { stato: "attenzione", testo: "Battito più alto del solito stanotte.", media, soglia, stanotte };
-  return { stato: "ok", testo: "Via libera.", media, soglia, stanotte };
+  const alta = (n) => n && n[k] >= soglia;
+  if (alta(stanotte) && alta(ieri)) return { ...base, stato: "riduci", testo: `${M.due}: riduci il carico oggi e domani.`, media, soglia };
+  if (alta(stanotte)) return { ...base, stato: "attenzione", testo: `${M.nome[0].toUpperCase() + M.nome.slice(1)} più alto del solito ${M.stanotte}.`, media, soglia };
+  return { ...base, stato: "ok", testo: "Via libera.", media, soglia };
 }
 const giornoPrima = (d) => { const x = new Date(d + "T12:00:00"); x.setDate(x.getDate() - 1); return x.toISOString().slice(0, 10); };
 

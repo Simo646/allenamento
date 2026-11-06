@@ -10,7 +10,7 @@ import { dataLocale } from "./analisi-file.js";
 import { salute } from "./sorgenti.js";
 
 export const FONTE_SALUTE = "Health Connect";
-const VERSIONE = 2;              // alzarla quando cambia il calcolo: alla prossima apertura si reimporta tutto
+const VERSIONE = 3;              // alzarla quando cambia il calcolo: alla prossima apertura si reimporta tutto
 const MIN_NOTTE = 120;           // minuti di sonno perché un blocco conti come notte
 const PAUSA_MAX = 90 * 60000;    // sessioni separate da meno di così sono la stessa notte
 const SVEGLIO = new Set([1, 3, 7]); // fasi da sveglio di Health Connect: sveglio, fuori dal letto, sveglio a letto
@@ -77,6 +77,25 @@ export function nottiDaSessioni(sessioni = [], battito = [], ossigeno = [], { da
   return out;
 }
 
+// Battito a riposo dal plugin ([[istante, bpm]]) → { "2026-11-05": 54 }: l'ultimo valore del giorno (alcune app lo
+// aggiornano durante la giornata).
+export function riposoPerGiorno(riposo = [], { dalGiorno = "" } = {}) {
+  const out = {};
+  for (const [t, v] of [...riposo].sort((a, b) => a[0] - b[0])) {
+    const d = dataLocale(new Date(t));
+    if (d < dalGiorno || !(v >= 30 && v <= 120)) continue;
+    out[d] = Math.round(v);
+  }
+  return out;
+}
+// Il battito a riposo va nella voce del giorno, insieme alla notte; un giorno senza notte ha solo quello.
+export function conRiposo(notti, riposo) {
+  const out = {};
+  for (const [d, n] of Object.entries(notti)) out[d] = { ...n, fc_riposo: riposo[d] ?? null };
+  for (const [d, v] of Object.entries(riposo)) out[d] ??= { fc_riposo: v };
+  return out;
+}
+
 // Pesi dal plugin → { "2026-11-05": { kg } }: l'ultima pesata del giorno, al decimo di chilo.
 export function pesiDaMisure(pesi = [], { dalGiorno = "" } = {}) {
   const out = {};
@@ -108,7 +127,7 @@ export function unisci(esistente, nuovo, letti = Object.keys(nuovo)) {
   return chiavi(prima) === chiavi(dopo) ? undefined : dopo;
 }
 
-const CAMPI = { sonno: ["durata_min"], battito: ["fc_sonno"], ossigeno: ["spo2_min", "spo2_media", "spo2_max"], peso: ["kg"] };
+const CAMPI = { sonno: ["durata_min"], battito: ["fc_sonno"], ossigeno: ["spo2_min", "spo2_media", "spo2_max"], peso: ["kg"], riposo: ["fc_riposo"] };
 
 // Correzione una tantum dell'import delle versioni 1.6.0-1.7.0, che sommava le sessioni doppie e non segnava i campi
 // riempiti nelle notti inserite a mano. Rifà quel calcolo: se la durata di una notte a mano è identica a quella che
@@ -147,12 +166,13 @@ export function cambiDaImport({ notti, pesi, nottiSalvate = [], pesiSalvati = []
       if (n.importati?.includes("durata_min") || notti[n.data]?.durata_min === n.durata_min) continue;
       const segnata = { ...n, importati: [...(n.importati ?? []), "durata_min"].sort() };
       baseNotti.set(n.data, segnata);
-      if (!notti[n.data]) {
+      if (notti[n.data]?.durata_min == null) {
         // Quella mattina non c'è una notte vera: la durata sbagliata si toglie, il resto (scritto a mano) resta.
         const { data, durata_min, importati, ...resto } = segnata;
         const altri = importati.filter((k) => k !== "durata_min");
         const v = { ...resto, ...(altri.length ? { importati: altri } : {}) };
         cambi.notti[n.data] = Object.keys(v).length ? v : null;
+        if (Object.keys(v).length) baseNotti.set(n.data, { data: n.data, ...v }); else baseNotti.delete(n.data);
       }
     }
   }
@@ -181,17 +201,20 @@ export async function importaDaSalute() {
   const dalGiorno = dataLocale(new Date(limite + 36 * 3600e3));
   const r = await salute.leggi(da, a);
   const letti = Object.entries(CAMPI).filter(([k]) => permessi?.[k]).flatMap(([, c]) => c);
-  const notti = nottiDaSessioni(r?.sessioni, r?.battito, r?.ossigeno, { dalGiorno });
+  const riposo = riposoPerGiorno(r?.riposo, { dalGiorno });
+  const notti = conRiposo(nottiDaSessioni(r?.sessioni, r?.battito, r?.ossigeno, { dalGiorno }), riposo);
   const pesi = pesiDaMisure(r?.pesi, { dalGiorno });
   const { cambi, tolte } = cambiDaImport({ notti, pesi, nottiSalvate: stato.notti, pesiSalvati: stato.peso, letti, permessi, dalGiorno,
-    migra: ricorda.leggi("salute-versione") !== VERSIONE, sessioni: r?.sessioni });
+    migra: !(Number(ricorda.leggi("salute-versione")) >= 2), sessioni: r?.sessioni });
   await salvaGiorni("notti", cambi.notti);
   await salvaGiorni("peso", cambi.peso);
   ricorda.scrivi("salute-ultimo", new Date().toISOString());
   ricorda.scrivi("salute-versione", VERSIONE);
-  const riposo = (r?.riposo ?? []).map((x) => x[1]).filter((v) => v > 0);
-  ricorda.scrivi("salute-letto", { conti: r?.conti ?? {}, sessioni: r?.sessioni?.length ?? 0, battito: r?.battito?.length ?? 0, ossigeno: r?.ossigeno?.length ?? 0, notti: Object.keys(notti).length,
-    riposo: riposo.length ? { n: riposo.length, media: Math.round(riposo.reduce((x, y) => x + y, 0) / riposo.length), min: Math.min(...riposo), max: Math.max(...riposo) } : null });
+  const rip = (r?.riposo ?? []).filter((x) => x[1] > 0), bpm = rip.map((x) => x[1]);
+  ricorda.scrivi("salute-letto", { conti: r?.conti ?? {}, sessioni: r?.sessioni?.length ?? 0, battito: r?.battito?.length ?? 0, ossigeno: r?.ossigeno?.length ?? 0,
+    notti: Object.values(notti).filter((n) => n.durata_min != null).length, permessoRiposo: !!permessi?.riposo,
+    riposo: rip.length ? { n: rip.length, giorni: Object.keys(riposo).length, media: Math.round(bpm.reduce((x, y) => x + y, 0) / bpm.length), min: Math.min(...bpm), max: Math.max(...bpm),
+      ultimo: Math.max(...rip.map((x) => x[0])) } : null });
   const conta = (o) => Object.values(o).filter(Boolean).length;
   return { notti: conta(cambi.notti), pesi: conta(cambi.peso), tolte, lette: { notti: r?.sessioni?.length ?? 0, pesi: r?.pesi?.length ?? 0 } };
 }
@@ -228,7 +251,10 @@ export function riassuntoLettura() {
   // Battito per ora del giorno dell'app che ne scrive di più: dice se di notte arriva.
   const [pkgFc, cFc] = Object.entries(l.conti ?? {}).filter(([, c]) => c.ore).sort((a, b) => b[1].battito - a[1].battito)[0] ?? [];
   if (cFc) righe.push(`Battito di ${nomeApp(pkgFc)} per ora: ${cFc.ore.map((q, h) => `${h}h ${q}`).join(" · ")}.`);
-  if (l.riposo) righe.push(`Battito a riposo: media ${l.riposo.media} bpm (da ${l.riposo.min} a ${l.riposo.max}) su ${n(l.riposo.n, "giorno", "giorni")}.`);
+  const quando = (t) => new Date(t).toLocaleString("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  if (l.riposo) righe.push(`Battito a riposo: media ${l.riposo.media} bpm (da ${l.riposo.min} a ${l.riposo.max}), ${n(l.riposo.n, "valore", "valori")} in ${n(l.riposo.giorni ?? l.riposo.n, "giorno", "giorni")}${l.riposo.ultimo ? `; l'ultimo del ${quando(l.riposo.ultimo)}` : ""}.`);
+  else if (l.permessoRiposo) righe.push("Battito a riposo: nessuna app lo scrive in Health Connect.");
+  if (!l.battito && !l.riposo && l.notti) righe.push("Quindi per il controllo del recupero il battito va inserito a mano: quello nel sonno o quello a riposo, dall'app dell'orologio.");
   return { righe, nelSonno: `Nel sonno: ${n(l.battito, "misura", "misure")} di battito e ${l.ossigeno} di ossigeno; ${n(l.notti, "notte ricostruita", "notti ricostruite")} da ${n(l.sessioni, "sessione", "sessioni")}.` };
 }
 

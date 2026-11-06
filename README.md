@@ -40,7 +40,7 @@ Su un telefono nuovo, al primo avvio scegli **Importa un backup**.
 - Zone di battito calcolate dall'età, con la formula di Karvonen o scritte a mano, e un promemoria di cosa allena ognuna.
 - Grafici: minuti e zone per settimana, distanze, passo o velocità, massimale stimato per esercizio. Record personali per attività: distanza, durata, salita, velocità o passo, massimale.
 - Carico e forma: carico di ogni allenamento dal tempo in zona (o dalla fatica percepita, per la forza e senza fascia), forma di fondo, fatica e bilancio giorno per giorno, come il modello usato da TrainingPeaks e Garmin. È una tendenza, non una misura precisa.
-- Moduli facoltativi: sonno con avviso di recupero, ossigeno nel sonno, peso. Nell'app Android notti e peso si possono importare da Health Connect (Android 14 o successivo), da qualunque app li scriva lì.
+- Moduli facoltativi: sonno con avviso di recupero (dal battito nel sonno o a riposo), ossigeno nel sonno, peso. Nell'app Android notti e peso si possono importare da Health Connect (Android 14 o successivo), da qualunque app li scriva lì.
 
 ## Note
 

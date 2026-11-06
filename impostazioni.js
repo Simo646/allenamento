@@ -149,7 +149,7 @@ function interruttoriModuli(p, alCambio) {
     el("span", {}, el("b", {}, titolo), el("small", {}, testo)),
     el("input", { type: "checkbox", id: "m-" + k, role: "switch", checked: !!p.moduli[k], onchange: (e) => { p.moduli = { ...p.moduli, [k]: e.target.checked }; alCambio(); } }));
   return el("div", {},
-    voce("sonno", "Sonno e recupero", "Ore di sonno e battito notturno: ti avvisa quando è più alto del solito."),
+    voce("sonno", "Sonno e recupero", "Ore di sonno e battito (nel sonno o a riposo): ti avvisa quando è più alto del solito."),
     voce("ossigeno", "Ossigeno nel sonno", "SpO₂ minima, media e massima della notte."),
     voce("peso", "Peso", "Per seguire l'andamento nel tempo."));
 }

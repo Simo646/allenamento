@@ -1,6 +1,6 @@
 // Analisi: volume e zone per settimana, distanze, andamento per attività, forza per esercizio, sonno, ossigeno, peso.
 import { stato, registraVista, rivai, testata, coloreTipo, nomeTipo, modulo, limiti, intervalloZona, ZONE } from "./stato.js";
-import { recupero, CARDIO, testoSerie } from "./dati.js";
+import { recupero, CARDIO, testoSerie, MISURE_RECUPERO } from "./dati.js";
 import { TIPI, volume, massimale } from "./analisi-file.js";
 import { el, metti, oggi, piuGiorni, lunediDi, fmtData, fmtGiorno, fmtNum, fmtDur, fmtKg, fmtSec, somma } from "./util.js";
 import { COLORE_ZONA, graficoColonne, graficoLinea, graficoIntervalli, graficoForma, vuoto } from "./grafici.js";
@@ -178,12 +178,18 @@ registraVista("analisi", { vivo: true, render(main) {
   const notti = stato.notti.filter((n) => n.data >= primo);
   if (modulo("sonno")) {
     const r = recupero(stato.notti, d, stato.profilo.recupero);
-    const [c, g] = card("Battito nel sonno", r.soglia ? `Linea tratteggiata: la tua soglia di oggi, ${r.soglia} bpm (media ${fmtNum(r.media, 1)} + ${stato.profilo.recupero.scarto_bpm}).` : "La soglia compare dopo 5 notti.");
-    sezioni.push(c);
-    disegni.push(() => graficoLinea(g, {
-      punti: notti.filter((n) => n.fc_sonno != null).map((n) => ({ data: n.data, v: n.fc_sonno, extra: [[null, "Sonno", fmtDur(n.durata_min)]] })),
-      formato: { asse: String, tip: (v) => `${v} bpm`, nome: "Battito" }, soglia: r.soglia ?? undefined, etichettaSoglia: r.soglia ? `${r.soglia}` : "", titoloTip: (p) => fmtGiorno(p.data), colore: "var(--sonno)",
-    }));
+    // Un grafico per misura (nel sonno, a riposo): la soglia sta su quella che usa il controllo di oggi.
+    const conDati = Object.keys(MISURE_RECUPERO).filter((k) => notti.some((n) => n[k] != null));
+    for (const k of conDati.length ? conDati : ["fc_sonno"]) {
+      const M = MISURE_RECUPERO[k], mia = r.misura === k;
+      const [c, g] = card(M.titolo, mia && r.soglia ? `Linea tratteggiata: la tua soglia di oggi, ${r.soglia} bpm (media ${fmtNum(r.media, 1)} + ${stato.profilo.recupero.scarto_bpm}).`
+        : mia ? `La soglia compare dopo 5 ${M.giorni}.` : `Oggi il controllo del recupero usa il ${MISURE_RECUPERO[r.misura].nome}.`);
+      sezioni.push(c);
+      disegni.push(() => graficoLinea(g, {
+        punti: notti.filter((n) => n[k] != null).map((n) => ({ data: n.data, v: n[k], extra: k === "fc_sonno" ? [[null, "Sonno", fmtDur(n.durata_min)]] : [] })),
+        formato: { asse: String, tip: (v) => `${v} bpm`, nome: "Battito" }, soglia: mia ? r.soglia ?? undefined : undefined, etichettaSoglia: mia && r.soglia ? `${r.soglia}` : "", titoloTip: (p) => fmtGiorno(p.data), colore: "var(--sonno)",
+      }));
+    }
     const conDurata = notti.filter((n) => n.durata_min != null);
     const [c2, g2] = card("Ore di sonno", "Per notte.");
     sezioni.push(c2);
