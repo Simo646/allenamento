@@ -456,7 +456,7 @@ function moduloNotte(main, param) {
   const sonno = modulo("sonno"), ossigeno = modulo("ossigeno");
   const data = el("input", { id: "n-data", type: "date", value: param.data ?? oggi() });
   const inp = (id, ph) => el("input", { id, inputmode: "numeric", placeholder: ph });
-  const c = { ore: inp("n-ore", "7"), min: inp("n-min", "30"), fc_sonno: inp("n-fc", "52"), punteggio: inp("n-punti", "80"), spo2_min: inp("n-spo2-min", "92"), spo2_media: inp("n-spo2-media", "96"), spo2_max: inp("n-spo2-max", "99") };
+  const c = { ore: inp("n-ore", "7"), min: inp("n-min", "30"), fc_sonno: inp("n-fc", "52"), spo2_min: inp("n-spo2-min", "92"), spo2_media: inp("n-spo2-media", "96"), spo2_max: inp("n-spo2-max", "99") };
   const nota = el("textarea", { id: "n-nota", placeholder: "Risvegli, caldo, mal di testa…" });
   const esitoN = el("span", { class: "esito", role: "status" });
   const salva = el("button", { type: "button", class: "btn primario" }, "Salva la notte");
@@ -465,7 +465,7 @@ function moduloNotte(main, param) {
     const n = stato.notti.find((x) => x.data === data.value);
     c.ore.value = n?.durata_min != null ? Math.floor(n.durata_min / 60) : "";
     c.min.value = n?.durata_min != null ? n.durata_min % 60 : "";
-    for (const k of ["fc_sonno", "punteggio", "spo2_min", "spo2_media", "spo2_max"]) c[k].value = n?.[k] ?? "";
+    for (const k of ["fc_sonno", "spo2_min", "spo2_media", "spo2_max"]) c[k].value = n?.[k] ?? "";
     nota.value = n?.nota ?? "";
     salva.textContent = n ? "Aggiorna la notte" : "Salva la notte";
     togli.hidden = !n;
@@ -477,7 +477,7 @@ function moduloNotte(main, param) {
     const ore = numero(c.ore.value), mm = numero(c.min.value), fc = numero(c.fc_sonno.value);
     const valori = {
       durata_min: ore != null || mm != null ? Math.round((ore ?? 0) * 60 + (mm ?? 0)) : null,
-      fc_sonno: fc != null ? Math.round(fc) : null, punteggio: numero(c.punteggio.value),
+      fc_sonno: fc != null ? Math.round(fc) : null,
       spo2_min: numero(c.spo2_min.value), spo2_media: numero(c.spo2_media.value), spo2_max: numero(c.spo2_max.value), nota: nota.value.trim(),
     };
     if (!Object.entries(valori).some(([k, x]) => k !== "nota" && x != null)) return esito(esitoN, "Inserisci almeno un valore.", "err");
@@ -493,7 +493,7 @@ function moduloNotte(main, param) {
     el("section", { class: "card modulo" },
       el("p", { class: "sotto" }, "Copia i valori dall'app del tuo orologio o anello. Se la data c'è già, la aggiorni."),
       campo("Mattina del", data),
-      sonno ? el("div", { class: "righe" }, campo("Ore di sonno", c.ore), campo("Minuti", c.min), campo("Battito medio nel sonno", c.fc_sonno, "bpm"), campo("Punteggio", c.punteggio, "se l'app lo dà")) : null,
+      sonno ? el("div", { class: "righe" }, campo("Ore di sonno", c.ore), campo("Minuti", c.min), campo("Battito medio nel sonno", c.fc_sonno, "bpm")) : null,
       ossigeno ? el("div", { class: "righe" }, campo("SpO₂ minima", c.spo2_min, "%"), campo("SpO₂ media", c.spo2_media, "%"), campo("SpO₂ massima", c.spo2_max, "%")) : null,
       campo("Nota", nota),
       el("div", { class: "azioni" }, salva, togli, esitoN)));
