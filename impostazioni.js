@@ -224,13 +224,15 @@ registraVista("impostazioni", { vivo: false, render(main) {
 /* ---------- Health Connect: notti e peso scritti da altre app (app Android, Android 14+) ---------- */
 function cardSalute() {
   if (!saluteNelTelefono()) return null;
-  const VOCI = [["sonno", "sonno"], ["battito", "battito"], ["ossigeno", "ossigeno"], ["peso", "peso"]];
+  const VOCI = [["sonno", "sonno"], ["battito", "battito"], ["ossigeno", "ossigeno"], ["peso", "peso"], ["riposo", "battito a riposo"]];
   const esitoS = el("span", { class: "esito", role: "status" });
   const permessi = el("p", { class: "sotto" });
   const letto = el("details", { class: "letto-salute", hidden: true });
   const importa = el("button", { type: "button", class: "btn" }, "Importa adesso");
   const gestisci = el("button", { type: "button", class: "lnk" }, "Permessi in Health Connect");
-  const azioni = el("div", { class: "azioni", hidden: !saluteAttiva() }, importa, gestisci);
+  // Permessi mancanti (per esempio il battito a riposo, aggiunto nella 1.7.2): si chiedono di nuovo con un tocco.
+  const mancanti = el("button", { type: "button", class: "btn", hidden: true }, "Concedi i permessi mancanti");
+  const azioni = el("div", { class: "azioni", hidden: !saluteAttiva() }, importa, mancanti, gestisci);
   const interruttore = el("input", { type: "checkbox", id: "i-salute", role: "switch", checked: saluteAttiva() });
   const mostra = (st) => {
     if (!st?.disponibile) {
@@ -239,6 +241,7 @@ function cardSalute() {
       return;
     }
     const si = VOCI.filter(([k]) => st[k]).map(([, n]) => n), no = VOCI.filter(([k]) => !st[k]).map(([, n]) => n);
+    mancanti.hidden = !saluteAttiva() || !no.length;
     const u = ricorda.leggi("salute-ultimo");
     permessi.textContent = !saluteAttiva() ? "" : [
       si.length ? `Legge: ${si.join(", ")}.` : "Nessun permesso concesso.",
@@ -279,6 +282,12 @@ function cardSalute() {
     await esegui();
   };
   importa.onclick = esegui;
+  mancanti.onclick = async () => {
+    mancanti.disabled = true;
+    try { await salute.chiediPermessi(); } catch { /* resta com'era */ }
+    mancanti.disabled = false;
+    await esegui();
+  };
   gestisci.onclick = () => salute.apriImpostazioni().catch(() => esito(esitoS, "Non riesco ad aprire Health Connect.", "err"));
   aggiorna();
   return el("section", { class: "card modulo" }, el("h2", {}, "Health Connect"),

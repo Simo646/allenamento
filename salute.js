@@ -189,7 +189,9 @@ export async function importaDaSalute() {
   await salvaGiorni("peso", cambi.peso);
   ricorda.scrivi("salute-ultimo", new Date().toISOString());
   ricorda.scrivi("salute-versione", VERSIONE);
-  ricorda.scrivi("salute-letto", { conti: r?.conti ?? {}, sessioni: r?.sessioni?.length ?? 0, battito: r?.battito?.length ?? 0, ossigeno: r?.ossigeno?.length ?? 0, notti: Object.keys(notti).length });
+  const riposo = (r?.riposo ?? []).map((x) => x[1]).filter((v) => v > 0);
+  ricorda.scrivi("salute-letto", { conti: r?.conti ?? {}, sessioni: r?.sessioni?.length ?? 0, battito: r?.battito?.length ?? 0, ossigeno: r?.ossigeno?.length ?? 0, notti: Object.keys(notti).length,
+    riposo: riposo.length ? { n: riposo.length, media: Math.round(riposo.reduce((x, y) => x + y, 0) / riposo.length), min: Math.min(...riposo), max: Math.max(...riposo) } : null });
   const conta = (o) => Object.values(o).filter(Boolean).length;
   return { notti: conta(cambi.notti), pesi: conta(cambi.peso), tolte, lette: { notti: r?.sessioni?.length ?? 0, pesi: r?.pesi?.length ?? 0 } };
 }
@@ -217,9 +219,16 @@ export function riassuntoLettura() {
   const l = ricorda.leggi("salute-letto");
   if (!l) return null;
   const n = (q, uno, tanti) => `${q} ${q === 1 ? uno : tanti}`;
+  const notte = (c) => (c.ore ?? []).slice(0, 6).reduce((a, x) => a + x, 0);
   const righe = Object.entries(l.conti ?? {}).map(([pkg, c]) =>
-    `${nomeApp(pkg)}: ${[c.sonno ? n(c.sonno, "sessione di sonno", "sessioni di sonno") : null, c.battito ? n(c.battito, "misura di battito", "misure di battito") : null,
-      c.ossigeno ? n(c.ossigeno, "misura di ossigeno", "misure di ossigeno") : null, c.peso ? n(c.peso, "peso", "pesi") : null].filter(Boolean).join(", ") || "niente"}.`);
+    `${nomeApp(pkg)}: ${[c.sonno ? n(c.sonno, "sessione di sonno", "sessioni di sonno") : null,
+      c.battito ? n(c.battito, "misura di battito", "misure di battito") + (c.ore ? ` (${notte(c)} tra mezzanotte e le 6)` : "") : null,
+      c.ossigeno ? n(c.ossigeno, "misura di ossigeno", "misure di ossigeno") : null, c.peso ? n(c.peso, "peso", "pesi") : null,
+      c.riposo ? n(c.riposo, "battito a riposo", "battiti a riposo") : null].filter(Boolean).join(", ") || "niente"}.`);
+  // Battito per ora del giorno dell'app che ne scrive di più: dice se di notte arriva.
+  const [pkgFc, cFc] = Object.entries(l.conti ?? {}).filter(([, c]) => c.ore).sort((a, b) => b[1].battito - a[1].battito)[0] ?? [];
+  if (cFc) righe.push(`Battito di ${nomeApp(pkgFc)} per ora: ${cFc.ore.map((q, h) => `${h}h ${q}`).join(" · ")}.`);
+  if (l.riposo) righe.push(`Battito a riposo: media ${l.riposo.media} bpm (da ${l.riposo.min} a ${l.riposo.max}) su ${n(l.riposo.n, "giorno", "giorni")}.`);
   return { righe, nelSonno: `Nel sonno: ${n(l.battito, "misura", "misure")} di battito e ${l.ossigeno} di ossigeno; ${n(l.notti, "notte ricostruita", "notti ricostruite")} da ${n(l.sessioni, "sessione", "sessioni")}.` };
 }
 
