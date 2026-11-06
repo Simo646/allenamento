@@ -158,7 +158,10 @@ export function recupero(notti, data, { scarto_bpm = 3, notti: quante = 14 } = {
   if (prima.length < 5) return { stato: "dati", testo: `Servono almeno 5 notti per la tua media (ne hai ${prima.length}).`, media: null, soglia: null, stanotte };
   const media = prima.reduce((a, n) => a + n.fc_sonno, 0) / prima.length;
   const soglia = Math.round(media + scarto_bpm);
-  if (!stanotte) return { stato: "manca", testo: "Manca la notte di oggi.", media, soglia, stanotte: null };
+  // Notte registrata ma senza battito (per esempio importata con la sola durata): manca solo il battito.
+  if (!stanotte) return notti.some((n) => n.data === data)
+    ? { stato: "senzaFc", testo: "Stanotte manca il battito nel sonno: serve per il controllo del recupero.", media, soglia, stanotte: null }
+    : { stato: "manca", testo: "Manca la notte di oggi.", media, soglia, stanotte: null };
   const ieri = ord.find((n) => n.data === giornoPrima(data));
   const alta = (n) => n && n.fc_sonno >= soglia;
   if (alta(stanotte) && alta(ieri)) return { stato: "riduci", testo: "Due notti col battito alto: riduci il carico oggi e domani.", media, soglia, stanotte };

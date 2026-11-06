@@ -5,7 +5,7 @@ import { PROFILO_PREDEFINITO, MODELLI_SETTIMANA, settimanaDaModello, etaDa, crea
 import { calcolaZone, fcMaxDaEta, zoneDaCurva, validaLimiti, TIPI } from "./analisi-file.js";
 import { el, metti, oggi, numero, avviso, esito, conConferma, campo, ricorda, applicaTema, temaScuro } from "./util.js";
 import { nativo, condividiFile, salute, saluteNelTelefono } from "./sorgenti.js";
-import { saluteAttiva, impostaSalute, importaDaSalute, testoImport } from "./salute.js";
+import { saluteAttiva, impostaSalute, importaDaSalute, testoImport, riassuntoLettura } from "./salute.js";
 import { scartaInterrotta } from "./dal-vivo.js";
 import { mappePossibili, mappeAttive, impostaMappe, eliminaTutteLeMappe } from "./mappe.js";
 
@@ -227,6 +227,7 @@ function cardSalute() {
   const VOCI = [["sonno", "sonno"], ["battito", "battito"], ["ossigeno", "ossigeno"], ["peso", "peso"]];
   const esitoS = el("span", { class: "esito", role: "status" });
   const permessi = el("p", { class: "sotto" });
+  const letto = el("details", { class: "letto-salute", hidden: true });
   const importa = el("button", { type: "button", class: "btn" }, "Importa adesso");
   const gestisci = el("button", { type: "button", class: "lnk" }, "Permessi in Health Connect");
   const azioni = el("div", { class: "azioni", hidden: !saluteAttiva() }, importa, gestisci);
@@ -244,6 +245,10 @@ function cardSalute() {
       si.length && no.length ? `Senza permesso: ${no.join(", ")}.` : "",
       u ? `Ultima importazione: ${new Date(u).toLocaleString("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}.` : "",
     ].filter(Boolean).join(" ");
+    // Che cosa ha scritto ogni app: serve a capire se battito e ossigeno arrivano davvero.
+    const l = saluteAttiva() ? riassuntoLettura() : null;
+    letto.hidden = !l;
+    if (l) letto.replaceChildren(el("summary", {}, "Cosa arriva da Health Connect"), ...l.righe.map((t) => el("p", { class: "sotto" }, t)), el("p", { class: "sotto" }, l.nelSonno));
   };
   const aggiorna = () => salute.stato().then(mostra).catch(() => mostra(null));
   const esegui = async () => {
@@ -281,7 +286,7 @@ function cardSalute() {
       el("span", {}, el("b", {}, "Notti e peso da Health Connect"),
         el("small", {}, "Durata del sonno, battito e ossigeno nella notte e peso, da qualunque app li scriva lì (Mi Fitness, Zepp, Samsung Health, una bilancia…). Prima gli ultimi 30 giorni, poi a ogni apertura dell'app.")),
       interruttore),
-    permessi, azioni, esitoS,
+    permessi, letto, azioni, esitoS,
     el("p", { class: "sotto" }, "L'app legge soltanto: non scrive in Health Connect e i dati restano su questo telefono. Notti e pesi inseriti a mano non vengono sovrascritti, si completano solo i valori che mancano. Per vederli servono i moduli Sonno, Ossigeno e Peso qui sopra."));
 }
 

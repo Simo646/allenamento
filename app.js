@@ -182,7 +182,7 @@ function cardRecupero(d) {
       el("span", {}, m == null ? "" : `media ${fmt(m)}`));
   };
   const r = sonno ? recupero(stato.notti, d, stato.profilo.recupero) : null;
-  const PILL = { ok: ["ok", "Via libera"], attenzione: ["attenzione", "Battito alto"], riduci: ["riduci", "Riduci il carico"], manca: ["neutro", "Manca la notte"], dati: ["neutro", "Media in costruzione"] };
+  const PILL = { ok: ["ok", "Via libera"], attenzione: ["attenzione", "Battito alto"], riduci: ["riduci", "Riduci il carico"], manca: ["neutro", "Manca la notte"], senzaFc: ["neutro", "Manca il battito"], dati: ["neutro", "Media in costruzione"] };
   const tiles = [
     sonno ? tile("Battito nel sonno", "fc_sonno", "bpm") : null,
     sonno ? tile("Sonno", "durata_min", "h", fmtOre) : null,
@@ -196,7 +196,7 @@ function cardRecupero(d) {
     ultima ? el("p", { class: "sotto" }, ultima === stanotte ? "Stanotte" : "Ultima notte inserita: " + fmtData(ultima.data, { weekday: "short", day: "numeric", month: "short" })) : null,
     el("div", { class: "tiles" + (tiles.length === 2 ? " due" : "") }, tiles),
     r ? el("p", { class: "sotto" }, r.testo + (r.soglia ? ` La tua media è ${fmtNum(r.media, 1)} bpm, soglia ${r.soglia}.` : "")) : null,
-    r?.stato === "manca" ? el("button", { type: "button", class: "btn piccolo", style: "justify-self:start", onclick: () => vai("registra", { tipo: "notte", data: d }) }, "Inserisci la notte") : null);
+    r?.stato === "manca" || r?.stato === "senzaFc" ? el("button", { type: "button", class: "btn piccolo", style: "justify-self:start", onclick: () => vai("registra", { tipo: "notte", data: d }) }, "Inserisci la notte") : null);
 }
 
 function cardSettimana(d) {
