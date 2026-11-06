@@ -1,10 +1,12 @@
 // Un allenamento: riga negli elenchi e foglio di dettaglio (numeri, traccia, curve, zone, serie, modifica).
 import { stato, limiti, ZONE, intervalloZona, coloreTipo, nomeTipo, attive, vai } from "./stato.js";
-import { SOTTOTIPI_BICI, volume, massimale, trovaVuoti, salitaDaCurvaGps } from "./analisi-file.js";
+import { SOTTOTIPI_BICI, volume, massimale, trovaVuoti, salitaDaCurvaGps, gpxDa } from "./analisi-file.js";
+import { salvaFile } from "./sorgenti.js";
 import { $, el, metti, icona, ICONE, fmtData, fmtDataLunga, fmtNum, fmtDur, fmtOre, fmtPasso, fmtKg, numero, avviso, esito, conConferma, somma, campo } from "./util.js";
 import { COLORE_ZONA, graficoTraccia, graficoCurva, graficoTempo, creaCursore } from "./grafici.js";
 import { leggiMappa, scaricaMappa, eliminaMappa, mappeAttive, quotaDalTerreno } from "./mappe.js";
 import { testoSerie, CARDIO } from "./dati.js";
+import { recordDi } from "./record.js";
 
 export const zoneDi = (s) => [s.z1_min, s.z2_min, s.z3_min, s.z4_min, s.z5_min];
 export const haZone = (s) => zoneDi(s).some((z) => z != null);
@@ -156,7 +158,7 @@ export function apriDettaglio(id) {
     el("div", { class: "foglio-testa" },
       el("div", {}, el("h2", { id: "d-titolo" }, s.nome || nomeTipo(s.tipo, s.sottotipo)), el("p", {}, `${fmtDataLunga(s.data)} · ${nomeTipo(s.tipo, s.sottotipo)}`)),
       el("button", { class: "tondo chiudi", type: "button", "aria-label": "Chiudi", onclick: chiudi }, icona(ICONE.chiudi))),
-    riquadri, pesanti, zoneBox, esercizi, timer,
+    recordBox(s), riquadri, pesanti, zoneBox, esercizi, timer,
     el("section", { class: "card modulo" }, el("h2", {}, "Modifica"),
       campo("Nome", nome),
       el("div", { class: "righe" }, campo("Tipo", tipo), campoSotto),
@@ -170,6 +172,29 @@ export function apriDettaglio(id) {
   // Il riquadro della salita si aggiorna se la salita viene ricalcolata aprendo l'allenamento.
   const tileSalita = [...(riquadri?.children ?? [])].find((t) => t.querySelector("small")?.textContent === "Salita");
   caricaPesanti(s, pesanti, lim, (v) => { const b = tileSalita?.querySelector("b"); if (b?.firstChild) b.firstChild.textContent = fmtNum(v); });
+}
+
+// Riquadro dei record personali che questo allenamento detiene ancora.
+function recordBox(s) {
+  const r = recordDi(stato.sessioni, s.id);
+  return r.length ? el("p", { class: "record-badge" }, el("b", {}, r.length > 1 ? "Record personali" : "Record personale"), r.join(" · ")) : null;
+}
+
+// Esporta la traccia in GPX (con quota e battito) per Strava, Komoot, Garmin Connect o per mandarla a qualcuno.
+function bottoneGpx(s, d) {
+  const esitoG = el("span", { class: "esito", role: "status" });
+  const b = el("button", { type: "button", class: "btn" }, "Esporta GPX");
+  b.onclick = async () => {
+    const testo = gpxDa(s, d, s.nome || nomeTipo(s.tipo, s.sottotipo));
+    if (!testo) return esito(esitoG, "Traccia non esportabile.", "err");
+    b.disabled = true;
+    try {
+      await salvaFile(`allenamento-${s.data}-${s.tipo.toLowerCase()}.gpx`, testo, { tipo: "application/gpx+xml", titolo: "Esporta la traccia" });
+      esito(esitoG, "GPX pronto.", "ok");
+    } catch (e) { if (!/cancel|abort/i.test(`${e?.name} ${e?.message}`)) esito(esitoG, "Non esportato: " + (e?.message ?? "errore"), "err"); }
+    finally { b.disabled = false; }
+  };
+  return el("div", { class: "azioni" }, b, esitoG);
 }
 
 // Traccia e curve stanno in dettagli/<id> e si scaricano solo aprendo l'allenamento.
@@ -197,7 +222,7 @@ async function caricaPesanti(s, box, lim, aggiornaSalita) {
   if (d.traccia?.lat?.length > 1) {
     const g = el("div");
     const nota = el("p", { class: "sotto" }, "Ogni tratto ha il colore della zona del battito. Tocca la traccia per tempo e battito.");
-    pezzi.push(el("section", { class: "card card-grafico" }, el("h2", {}, "Traccia"), nota, g));
+    pezzi.push(el("section", { class: "card card-grafico" }, el("h2", {}, "Traccia"), nota, g, bottoneGpx(s, d)));
     let mappa = await leggiMappa(s.id);
     grafici.push((cur) => graficoTraccia(g, d.traccia, d.curva_fc, lim, mappa, cur));
     // Mappa che manca (allenamento salvato senza rete, o tornato da un backup) o salvata a metà dettaglio prima della

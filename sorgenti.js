@@ -173,14 +173,79 @@ export async function schermoAcceso(sempre = false) {
   return () => { attivo = false; document.removeEventListener("visibilitychange", visibile); blocco?.release?.().catch(() => {}); };
 }
 
+// Notifica immediata con suono e vibrazione (app Android), anche a schermo spento: per gli avvisi di zona. Sempre lo
+// stesso id, così un avviso nuovo sostituisce il precedente.
+let canaleZona = null;
+export async function notificaZona(titolo, testo) {
+  if (!nativo()) return;
+  const n = plugin("LocalNotifications");
+  try {
+    canaleZona ??= n.createChannel({ id: "zona", name: "Avvisi di zona", description: "Battito fuori dalla zona scelta durante la registrazione", importance: 4, vibration: true, visibility: 1 });
+    await canaleZona;
+    await n.schedule({ notifications: [{ id: 7001, title: titolo, body: testo, channelId: "zona", smallIcon: "ic_registrazione" }] });
+  } catch { /* senza permesso delle notifiche restano i bip */ }
+}
+
 // Android 13+: senza questo permesso la notifica "Registrazione in corso" non si vede (la registrazione va lo stesso).
 export async function permessoNotifiche() {
   if (!nativo()) return;
   try { await plugin("LocalNotifications").requestPermissions(); } catch { /* facoltativo */ }
 }
 
-/* ---------- file: backup con il pannello Condividi di Android ---------- */
-export async function condividiFile(nome, testo) {
+/* ---------- file: backup e GPX con il pannello Condividi di Android ---------- */
+export async function condividiFile(nome, testo, titolo = "Salva il backup") {
   const { uri } = await plugin("Filesystem").writeFile({ path: nome, data: testo, directory: "CACHE", encoding: "utf8" });
-  await plugin("Share").share({ title: nome, files: [uri], dialogTitle: "Salva il backup" });
+  await plugin("Share").share({ title: nome, files: [uri], dialogTitle: titolo });
 }
+// Un file da mandare ad altre app o salvare: nell'app Android col pannello Condividi; nel browser con la condivisione
+// del telefono o, sul computer, come download.
+export async function salvaFile(nome, testo, { tipo = "application/octet-stream", titolo = nome } = {}) {
+  if (nativo()) return condividiFile(nome, testo, titolo);
+  const file = new File([testo], nome, { type: tipo });
+  if (matchMedia("(pointer: coarse)").matches && navigator.canShare?.({ files: [file] })) return navigator.share({ files: [file], title: titolo });
+  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(file), download: nome });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+}
+
+/* ---------- file aperti o condivisi da altre app (FIT, GPX, TCX) ---------- */
+// L'app Android compare in "Apri con" e "Condividi" per questi file: il plugin nativo FileInArrivo li legge e qui
+// diventano File come quelli scelti a mano. Se il nome non ha l'estensione giusta (capita con alcune app), il formato si
+// riconosce dal contenuto; altrimenti il file arriva così com'è e l'importazione lo scarta.
+export function formatoDa(byte) {
+  if (byte.length >= 12 && String.fromCharCode(...byte.slice(8, 12)) === ".FIT") return "fit";
+  const testo = new TextDecoder().decode(byte.slice(0, 4096));
+  return /<gpx[\s>]/.test(testo) ? "gpx" : /<TrainingCenterDatabase[\s>]/.test(testo) ? "tcx" : null;
+}
+export function fileInArrivo(onFile, onErrore) {
+  if (!nativo()) return;
+  const p = plugin("FileInArrivo");
+  const prendi = async () => {
+    try {
+      const r = await p.prendi();
+      if (!r?.dati) return;
+      const byte = Uint8Array.from(atob(r.dati), (c) => c.charCodeAt(0));
+      let nome = String(r.nome || "allenamento").split(/[\/]/).pop();
+      const formato = formatoDa(byte);
+      if (formato && !new RegExp(`\.${formato}$`, "i").test(nome)) nome = `${nome.replace(/\.[^.]*$/, "")}.${formato}`;
+      onFile(new File([byte], nome, { type: r.tipo || "application/octet-stream" }));
+    } catch (e) { onErrore?.(e?.message ?? "file non letto"); }
+  };
+  p.addListener("file", prendi).catch(() => {});
+  prendi();
+}
+
+/* ---------- Health Connect (app Android, Android 14 o successivo) ---------- */
+// Plugin nativo Salute, solo lettura. stato() e chiediPermessi() → { disponibile, sonno, battito, ossigeno, peso };
+// leggi(da, a) in ms → { notti: [{inizio, fine, dormito_min, fc_somma, fc_n, spo2_*, fonte}], pesi: [{t, kg, fonte}] }.
+// Su 127.0.0.1 window.__saluteFinta ({ stato, leggi(da, a) }) fa da Health Connect per le prove automatiche.
+const saluteFinta = () => location.hostname === "127.0.0.1" && window.__saluteFinta ? window.__saluteFinta : null;
+export const saluteNelTelefono = () => nativo() || !!saluteFinta();
+export const salute = {
+  stato: async () => saluteFinta()?.stato ?? (nativo() ? plugin("Salute").stato() : { disponibile: false }),
+  chiediPermessi: async () => saluteFinta()?.stato ?? plugin("Salute").chiediPermessi(),
+  apriImpostazioni: async () => (saluteFinta() ? undefined : plugin("Salute").apriImpostazioni()),
+  leggi: async (da, a) => saluteFinta()?.leggi(da, a) ?? plugin("Salute").leggi({ da, a }),
+};

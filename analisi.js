@@ -1,12 +1,13 @@
 // Analisi: volume e zone per settimana, distanze, andamento per attività, forza per esercizio, sonno, ossigeno, peso.
-import { stato, registraVista, rivai, testata, coloreTipo, modulo, limiti, intervalloZona, ZONE } from "./stato.js";
+import { stato, registraVista, rivai, testata, coloreTipo, nomeTipo, modulo, limiti, intervalloZona, ZONE } from "./stato.js";
 import { recupero, CARDIO, testoSerie } from "./dati.js";
 import { TIPI, volume, massimale } from "./analisi-file.js";
 import { el, metti, oggi, piuGiorni, lunediDi, fmtData, fmtGiorno, fmtNum, fmtDur, fmtKg, fmtSec, somma } from "./util.js";
 import { COLORE_ZONA, graficoColonne, graficoLinea, graficoIntervalli, vuoto } from "./grafici.js";
-import { zoneDi, haZone, conPasso, volumeSessione } from "./dettaglio.js";
+import { zoneDi, haZone, conPasso, volumeSessione, apriDettaglio } from "./dettaglio.js";
+import { recordPersonali } from "./record.js";
 
-const scelte = { settimane: 8, andamento: null, esercizio: null };
+const scelte = { settimane: 8, andamento: null, esercizio: null, record: null };
 
 // Promemoria: che cosa allena ogni zona (con i limiti al 60, 70, 80 e 90% usati dall'app).
 const A_COSA_SERVONO = [
@@ -31,6 +32,24 @@ registraVista("analisi", { vivo: true, render(main) {
   const card = (titolo, sotto, ...resto) => { const g = el("div"); return [el("section", { class: "card" }, el("h2", {}, titolo), sotto ? el("p", { class: "sotto" }, sotto) : null, ...resto, g), g]; };
   const disegni = [];
   const sezioni = [];
+
+  // Record personali: di sempre, non solo nel periodo scelto. Un'attività alla volta; toccandone uno si apre l'allenamento.
+  const rec = recordPersonali(stato.sessioni);
+  const FORMATO = { distanza: (v) => `${fmtNum(v, 1)} km`, durata: fmtDur, salita: (v) => `${fmtNum(v)} m`, velocita: (v) => `${fmtNum(v, 1)} km/h`, passo: (v) => `${fmtSec(v)} /km` };
+  const gruppiRec = [
+    ...rec.cardio.map((g) => ({ chiave: g.tipo + "|" + (g.sottotipo ?? ""), nome: nomeTipo(g.tipo, g.sottotipo), righe: g.voci.map((v) => [v.breve, FORMATO[v.voce](v.valore), v]) })),
+    ...(rec.forza.length ? [{ chiave: "Forza", nome: "Forza: massimale stimato", righe: rec.forza.map((f) => [f.esercizio + (f.serie ? ` · ${fmtKg(f.serie.kg)} kg × ${f.serie.rip}` : ""), `${fmtKg(f.valore)} kg`, f]) }] : []),
+  ];
+  if (gruppiRec.length) {
+    if (!gruppiRec.some((g) => g.chiave === scelte.record)) scelte.record = gruppiRec[0].chiave;
+    const g = gruppiRec.find((x) => x.chiave === scelte.record);
+    const sel = gruppiRec.length > 1 ? el("select", { class: "input", "aria-label": "Attività", onchange: (e) => { scelte.record = e.target.value; ridisegnaAnalisi(); } },
+      gruppiRec.map((x) => el("option", { value: x.chiave, selected: x === g }, x.nome))) : el("h3", { class: "titolo-record" }, g.nome);
+    sezioni.push(el("section", { class: "card" }, el("h2", {}, "Record personali"),
+      el("p", { class: "sotto" }, "Di sempre, non solo nel periodo scelto. Tocca un record per aprire l'allenamento."), sel,
+      el("div", { class: "gruppo-record" }, g.righe.map(([nome, valore, r]) => el("button", { type: "button", class: "riga-record", onclick: () => apriDettaglio(r.id) },
+        el("span", {}, nome, el("small", {}, fmtData(r.data, { day: "numeric", month: "short", year: "numeric" }))), el("b", { class: "num" }, valore))))));
+  }
 
   // Minuti per tipo
   const [cVol, gVol] = card("Minuti a settimana", "Per tipo di allenamento.");

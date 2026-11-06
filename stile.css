@@ -387,5 +387,14 @@ body.con-barra .schede-nav{display:none}
 .grafico text.valore-istante{fill:var(--ink);font-size:13px;font-weight:700;paint-order:stroke;stroke:var(--surface);stroke-width:3px}
 /* Grafici del dettaglio: meno margine ai lati, così sono più larghi */
 .card-grafico{padding:12px 4px 10px}
-.card-grafico>h2,.card-grafico>p,.card-grafico .legenda,.card-grafico .attribuzione{padding-inline:10px}
+.card-grafico>h2,.card-grafico>p,.card-grafico .legenda,.card-grafico .attribuzione,.card-grafico>.azioni{padding-inline:10px}
 @media (max-width:520px){.foglio{padding-left:max(8px,env(safe-area-inset-left,0px));padding-right:max(8px,env(safe-area-inset-right,0px))}}
+/* Record personali (Analisi) e riquadro nel dettaglio */
+.gruppo-record{display:grid}
+.titolo-record{font-family:var(--font-ui);font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.riga-record{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;min-height:44px;padding:6px 0;border:0;border-top:1px solid var(--line);background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.riga-record>span{min-width:0}
+.riga-record small{display:block;font-size:12px;color:var(--muted)}
+.riga-record b{flex:none;font-family:var(--font-ui);font-size:18px;font-weight:700}
+.record-badge{margin:0;padding:10px 12px;border-radius:var(--r);background:var(--warn-bg);font-size:14px}
+.record-badge b{display:block;font-family:var(--font-ui);font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--warn)}

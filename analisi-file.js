@@ -441,6 +441,36 @@ export function tracciaGps(punti, inizio) {
   return { t, lat, lon };
 }
 
+/* ---------- GPX in uscita ---------- */
+// GPX 1.1 dalla traccia salvata (semplificata: al massimo MAX_PUNTI_TRACCIA punti), con quota e battito presi dalle curve
+// ogni 15 s. Il battito va nell'estensione TrackPointExtension di Garmin, che leggono Strava, Komoot, Garmin Connect e gli altri.
+const TIPO_GPX = { Corsa: "running", Camminata: "walking", Trekking: "hiking", Bici: "cycling" };
+const perXml = (t) => String(t).replace(/[<>&"']/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&apos;" })[c]);
+const isoSecondi = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z");
+export function gpxDa(s, d, nome = s.tipo) {
+  const tr = d?.traccia;
+  if (!(tr?.lat?.length > 1)) return null;
+  const t0 = s.inizio ? Date.parse(s.inizio) : NaN;
+  const daCurva = (c, chiave, sec) => {
+    const v = c?.[chiave];
+    if (!v?.length) return null;
+    return v[Math.min(v.length - 1, Math.max(0, Math.floor(sec / (c.passo_s ?? PASSO_CURVA_S))))] ?? null;
+  };
+  const punti = tr.lat.map((lat, i) => {
+    const sec = tr.t[i], ele = daCurva(d.curve, "quota", sec), fc = daCurva(d.curva_fc, "fc", sec);
+    return `<trkpt lat="${lat}" lon="${tr.lon[i]}">` + (ele != null ? `<ele>${arrotonda(ele, 1)}</ele>` : "")
+      + (Number.isFinite(t0) ? `<time>${isoSecondi(t0 + sec * 1000)}</time>` : "")
+      + (fc > 0 ? `<extensions><gpxtpx:TrackPointExtension><gpxtpx:hr>${Math.round(fc)}</gpxtpx:hr></gpxtpx:TrackPointExtension></extensions>` : "")
+      + "</trkpt>";
+  });
+  const n = perXml(nome);
+  return [`<?xml version="1.0" encoding="UTF-8"?>`,
+    `<gpx version="1.1" creator="Allenamento su misura" xmlns="http://www.topografix.com/GPX/1/1" xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v1">`,
+    `<metadata><name>${n}</name>${Number.isFinite(t0) ? `<time>${isoSecondi(t0)}</time>` : ""}</metadata>`,
+    `<trk><name>${n}</name>${TIPO_GPX[s.tipo] ? `<type>${TIPO_GPX[s.tipo]}</type>` : ""}<trkseg>`,
+    ...punti, "</trkseg></trk></gpx>", ""].join("\n");
+}
+
 /* ---------- forza ---------- */
 // Massimale stimato (Epley) e volume di una lista di serie [{kg, rip}].
 export const epley = (kg, rip) => (kg > 0 && rip > 0 ? (rip === 1 ? kg : kg * (1 + rip / 30)) : null);

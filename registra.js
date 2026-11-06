@@ -328,11 +328,11 @@ function formFile(param) {
   const salva = el("button", { type: "button", class: "btn primario", hidden: true }, "Salva");
   const input = el("input", { type: "file", id: "file-allenamenti", multiple: true, accept: ".fit,.gpx,.tcx,application/gpx+xml,application/vnd.garmin.tcx+xml,application/octet-stream" });
 
-  input.addEventListener("change", async () => {
+  // File scelti qui o arrivati da un'altra app ("Apri con", "Condividi": param.files).
+  async function leggi(files) {
     attesa.length = 0;
     metti(box, );
     salva.hidden = true;
-    const files = [...input.files];
     if (!files.length) return;
     esito(esitoI, "Leggo i file…");
     for (const f of files) {
@@ -359,7 +359,9 @@ function formFile(param) {
     esito(esitoI, attesa.length ? "" : "Nessun file valido.", attesa.length ? "" : "err");
     salva.hidden = !attesa.length;
     salva.textContent = attesa.length === 1 ? "Salva l'allenamento" : `Salva ${attesa.length} allenamenti`;
-  });
+  }
+  input.addEventListener("change", () => leggi([...input.files]));
+  if (param.files?.length) leggi(param.files);
 
   function disegnaRiga(riga, voce) {
     const r = voce.r;

@@ -11,7 +11,8 @@ import "./analisi.js";
 import { esportaBackup } from "./impostazioni.js";
 import { leggiBozza, riprendiInterrotta, scartaInterrotta, registrazioneInCorso } from "./dal-vivo.js";
 import { scartaForza } from "./registra.js";
-import { nativo } from "./sorgenti.js";
+import { nativo, fileInArrivo } from "./sorgenti.js";
+import { importaSeServe } from "./salute.js";
 
 applicaTema(); // il tema scelto nelle Impostazioni, prima di disegnare
 
@@ -287,3 +288,16 @@ if (nativo()) (async () => {
 
 vai("oggi");
 avvia();
+
+// App Android: file FIT, GPX o TCX aperti o condivisi da un'altra app → Importa file, già letti. Si aspetta che i dati
+// siano caricati (serve sapere se l'allenamento c'è già); al primo avvio prima si completa la configurazione.
+const datiPronti = () => new Promise((ok) => { const prova = () => (stato.caricati.has("config") && stato.caricati.has("sessioni") ? ok() : setTimeout(prova, 100)); prova(); });
+fileInArrivo(async (file) => {
+  await datiPronti();
+  if (!stato.haProfilo) return avviso("Completa prima la configurazione, poi riapri il file");
+  if (registrazioneInCorso()) return avviso("Registrazione in corso: importa il file dopo averla finita");
+  vai("registra", { files: [file] });
+}, (testo) => avviso(testo));
+
+// Health Connect, se l'importazione è accesa: notti e peso nuovi a ogni apertura (al massimo ogni 3 ore).
+datiPronti().then(importaSeServe).then((testo) => { if (testo) avviso(testo); }).catch(() => { /* si riprova alla prossima apertura */ });

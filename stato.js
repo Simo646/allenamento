@@ -49,6 +49,16 @@ export async function salvaGiorno(collezione, data, valori) {
   if (!Object.keys(giorni).length) return stato.archivio.elimina(collezione, mese);
   return stato.archivio.scrivi(collezione, mese, { giorni });
 }
+// Più giorni insieme ({data: valori}, per esempio dall'import di Health Connect): un solo salvataggio per mese, così le
+// date dello stesso mese non si sovrascrivono a vicenda.
+export async function salvaGiorni(collezione, perData) {
+  const mesi = {};
+  for (const [data, valori] of Object.entries(perData)) (mesi[data.slice(0, 7)] ??= {})[data] = valori;
+  for (const [mese, nuovi] of Object.entries(mesi)) {
+    const doc = (collezione === "notti" ? stato.nottiMesi : stato.pesoMesi).find((m) => m.id === mese);
+    await stato.archivio.scrivi(collezione, mese, { giorni: { ...(doc?.giorni ?? {}), ...nuovi } });
+  }
+}
 export const salvaProfilo = (p) => stato.archivio.scrivi("config", "profilo", p);
 export const salvaSettimana = (s) => stato.archivio.scrivi("config", "settimana", s);
 

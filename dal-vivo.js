@@ -3,17 +3,17 @@
 // in corso e il successivo, e segnali sonori a 3-2-1. Forza: si passa alla scheda serie per serie di registra.js, con la
 // fascia già collegata. La registrazione in corso si salva ogni 10 s in IndexedDB: se l'app si chiude, Oggi propone di
 // riprenderla o salvarla. GPS, barometro (per il dislivello) e fascia arrivano da sorgenti.js, i segnali da suoni.js.
-import { stato, registraVista, vai, testata, limiti, attive, nomeTipo, ledDalBattito } from "./stato.js";
+import { stato, registraVista, vai, testata, limiti, attive, nomeTipo, ledDalBattito, intervalloZona } from "./stato.js";
 import { SOTTOTIPI_BICI } from "./analisi-file.js";
 import { CARDIO, statoVoci, vociDelGiorno } from "./dati.js";
 import { el, metti, oggi, fmtNum, fmtSec, fmtPasso, numero, avviso, esito, conConferma, ricorda, opzione, campo } from "./util.js";
 import { Registratore } from "./registratore.js";
-import { disponibile, avviaGps, collegaFascia, schermoAcceso, permessoNotifiche, apriImpostazioniPosizione, nativo, avviaBarometro, haBarometro } from "./sorgenti.js";
+import { disponibile, avviaGps, collegaFascia, schermoAcceso, permessoNotifiche, apriImpostazioniPosizione, nativo, avviaBarometro, haBarometro, notificaZona } from "./sorgenti.js";
 import { metriche, barraZone, apriDettaglio } from "./dettaglio.js";
 import { salvaRiassunto, iniziaForza } from "./registra.js";
 import { contenutoScheda, riassuntoScheda } from "./schede.js";
 import { impostazioniDa, eserciziDelGiro, fasiHiit, durataFasi, statoTimer, inizioFaseDopo, segnaliHiit } from "./timer-hiit.js";
-import { programmaSegnali, sbloccaAudio, suoniAttivi, impostaSuoni } from "./suoni.js";
+import { programmaSegnali, sbloccaAudio, suoniAttivi, impostaSuoni, segnaleZona } from "./suoni.js";
 
 const PAUSA_AUTO = ["Corsa", "Bici"];
 const NOME_FASE = { preparazione: "Preparati", lavoro: "Lavoro", pausa: "Pausa", recupero: "Recupero" };
@@ -25,7 +25,7 @@ export const registrazioneInCorso = () => !!s?.rec?.avviata && !s.finita;
 // La fascia collegata nella preparazione resta collegata partendo: le misure vanno alla registrazione in corso oppure,
 // per la forza, alla scheda serie per serie (iniziaForza cambia il destinatario).
 const fasciaVerso = {};
-const versoRegistrazione = () => Object.assign(fasciaVerso, { misura: (m) => s?.rec?.battito(m), stato: (st) => { if (s) s.statoFascia = st; } });
+const versoRegistrazione = () => Object.assign(fasciaVerso, { misura: (m) => { s?.rec?.battito(m); controllaZona(m.t ?? Date.now()); }, stato: (st) => { if (s) s.statoFascia = st; } });
 versoRegistrazione();
 const colleghiFascia = () => collegaFascia((m) => fasciaVerso.misura?.(m), (st) => fasciaVerso.stato?.(st));
 
@@ -70,7 +70,7 @@ function forseSalva(forza = false) {
   if (!forza && ora - (s.salvataAlle ?? 0) < 10000) return;
   s.salvataAlle = ora;
   const hiit = s.hiit ? { imp: s.hiit.imp, esercizi: s.hiit.esercizi, salto: s.hiit.salto } : null;
-  salvaBozza({ rec: s.rec.serializza(), param: { scheda: s.scelta?.scheda ?? null, hiit }, alle: ora });
+  salvaBozza({ rec: s.rec.serializza(), param: { scheda: s.scelta?.scheda ?? null, hiit, avvisoZona: s.avviso?.zona ?? null }, alle: ora });
 }
 
 // Ripresa di una registrazione interrotta (da Oggi): "riprendi" la continua, "salva" la chiude e mostra il riassunto.
@@ -78,7 +78,7 @@ export async function riprendiInterrotta(bozza, azione) {
   const p = bozza.param ?? {};
   const rec = Registratore.da(bozza.rec);
   s = { rec, param: {}, scelta: { tipo: rec.tipo, sottotipo: rec.sottotipo, scheda: p.scheda ?? p.voce?.scheda ?? null }, statoFascia: null,
-    hiit: p.hiit ? conFasi(p.hiit) : null };
+    hiit: p.hiit ? conFasi(p.hiit) : null, avviso: p.avvisoZona ? { zona: p.avvisoZona, fuoriDa: null, direzione: 0, ultimo: 0 } : null };
   rec.pausa(bozza.alle);
   if (azione === "salva") return finisci(bozza.alle);
   // Riparte in pausa: GPS di nuovo acceso, la fascia si ricollega dalla schermata, poi "Riprendi".
@@ -103,7 +103,7 @@ registraVista("dal-vivo", {
 // Attività e scheda proposte: quella da cui sei partito, altrimenti la prima voce di oggi non ancora fatta.
 function sceltaIniziale(param) {
   const sc = param.scheda ? stato.schede[param.scheda] : null;
-  if (sc) return { tipo: sc.tipo, sottotipo: sc.sottotipo ?? null, scheda: param.scheda, autoPausa: PAUSA_AUTO.includes(sc.tipo), hiit: null };
+  if (sc) return { tipo: sc.tipo, sottotipo: sc.sottotipo ?? null, scheda: param.scheda, autoPausa: PAUSA_AUTO.includes(sc.tipo), hiit: null, ...avvisoIniziale(sc.zona) };
   const voce = vociDiOggi().find((v) => attive().includes(v.tipo));
   return sceltaPer(voce?.tipo ?? attive()[0] ?? "Corsa");
 }
@@ -113,7 +113,27 @@ function sceltaPer(tipo) {
   const voce = vociDiOggi().find((v) => v.tipo === tipo);
   const tutte = Object.values(stato.schede).filter((x) => x.tipo === tipo);
   const scheda = voce?.scheda && stato.schede[voce.scheda] ? voce.scheda : (tipo === "Forza" || tipo === "HIIT") && tutte.length === 1 ? tutte[0].id : null;
-  return { tipo, sottotipo: voce?.sottotipo ?? stato.schede[scheda]?.sottotipo ?? null, scheda, autoPausa: PAUSA_AUTO.includes(tipo), hiit: null };
+  return { tipo, sottotipo: voce?.sottotipo ?? stato.schede[scheda]?.sottotipo ?? null, scheda, autoPausa: PAUSA_AUTO.includes(tipo), hiit: null,
+    ...avvisoIniziale(voce?.zona ?? stato.schede[scheda]?.zona) };
+}
+// Avviso di zona: la zona della voce o della scheda (altrimenti Z2); acceso o spento come l'ultima volta.
+const avvisoIniziale = (zona) => ({ zona: zona ?? 2, avvisoZona: ricorda.leggi("avviso-zona") === true });
+
+// Avviso di zona (cardio): se il battito resta fuori dalla zona scelta per 15 s, due bip e una notifica; si ripete ogni
+// minuto finché non rientri. Parte da ogni misura della fascia, quindi funziona anche a schermo spento.
+function controllaZona(t) {
+  const a = s?.avviso, r = s?.rec;
+  if (!a || !r?.avviata || r.inPausa || s.finita) return;
+  const z = r.zonaAttuale(t, limiti());
+  if (!z) return;
+  const dir = Math.sign(z - a.zona);
+  if (!dir) { a.fuoriDa = null; a.direzione = 0; return; }
+  if (a.fuoriDa == null || a.direzione !== dir) { a.fuoriDa = t; a.direzione = dir; return; }
+  if (t - a.fuoriDa < 15000 || t - a.ultimo < 60000) return;
+  a.ultimo = t;
+  segnaleZona(dir > 0);
+  notificaZona(dir > 0 ? `Battito sopra la Z${a.zona}` : `Battito sotto la Z${a.zona}`,
+    `${r.fcAttuale(t)} bpm, sei in Z${z}: ${dir > 0 ? "rallenta" : "puoi spingere un po' di più"}.`);
 }
 
 function schermataPreparazione(main, param) {
@@ -138,6 +158,7 @@ function schermataPreparazione(main, param) {
     scelta.scheda = e.target.value || null;
     scelta.hiit = null;
     if (scelta.scheda && stato.schede[scelta.scheda].sottotipo) scelta.sottotipo = stato.schede[scelta.scheda].sottotipo;
+    if (scelta.scheda && stato.schede[scelta.scheda].zona) scelta.zona = stato.schede[scelta.scheda].zona;
     ridisegna();
   } }, el("option", { value: "" }, "Nessuna scheda"), schede.map((x) => el("option", { value: x.id, selected: x.id === scelta.scheda }, x.titolo || nomeTipo(x.tipo, x.sottotipo))))) : null;
   const autoPausa = conGps ? el("label", { class: "interruttore" },
@@ -197,8 +218,9 @@ function schermataPreparazione(main, param) {
       s = null; // la fascia passa alla forza: uscendo da qui non va scollegata
       return iniziaForza({ scheda: scelta.scheda, avvio: t, fascia, collega: (misura, st) => Object.assign(fasciaVerso, { misura, stato: st }) });
     }
-    if (conGps) await permessoNotifiche();
+    if (conGps || (cardio && scelta.avvisoZona)) await permessoNotifiche();
     s.rec.avvia(t);
+    s.avviso = cardio && scelta.avvisoZona ? { zona: scelta.zona, fuoriDa: null, direzione: 0, ultimo: 0 } : null;
     if (hiit) s.hiit = conFasi({ imp: { ...scelta.hiit }, esercizi: eserciziDelGiro(sc?.esercizi?.map((e) => e.nome), scelta.hiit.n), salto: 0 });
     // Nell'app Android il GPS riparte in modalità "anche a schermo spento", con la notifica fissa.
     if (conGps) { await gpsInSfondo(); s.fermaBaro = await avviaBarometro((q) => s?.rec?.quota(q)); }
@@ -218,6 +240,7 @@ function schermataPreparazione(main, param) {
       el("fieldset", { class: "campo" }, el("legend", {}, "Attività"), tipi),
       sotto, selScheda, autoPausa),
     hiit ? boxTimer(scelta.hiit, sc) : schedaBox(sc),
+    cardio ? boxAvvisoZona(scelta) : null,
     el("section", { class: "card modulo" }, el("h2", {}, cardio ? "GPS e fascia cardio" : "Fascia cardio"),
       statoGps, impostazioniGps, statoQuota, boxFascia,
       el("p", { class: "sotto" }, cardio ? "La fascia è facoltativa: senza, niente battito e zone." : "Facoltativa: senza, registro lo stesso tempo ed esercizi.")),
@@ -233,6 +256,21 @@ function schedaBox(sc) {
     el("div", { class: "card-testa" }, el("h2", {}, sc.titolo || nomeTipo(sc.tipo)), el("span", { class: "sotto" }, riassuntoScheda(sc))),
     sc.nota ? el("p", { class: "nota-scheda" }, sc.nota) : null,
     contenutoScheda(sc));
+}
+
+// Avviso di zona: interruttore e zona obiettivo. Serve la fascia.
+function boxAvvisoZona(scelta) {
+  const zone = el("div", { class: "seg", role: "radiogroup", "aria-label": "Zona obiettivo", hidden: !scelta.avvisoZona },
+    [1, 2, 3, 4, 5].map((z) => opzione("dv-zona", String(z), `Z${z} ${intervalloZona(z - 1)}`, scelta.zona === z, () => { scelta.zona = z; })));
+  return el("section", { class: "card modulo" },
+    el("label", { class: "interruttore" },
+      el("span", {}, el("b", {}, "Avviso di zona"), el("small", {}, "Bip e notifica se il battito resta per 15 secondi fuori dalla zona scelta. Serve la fascia.")),
+      el("input", { type: "checkbox", role: "switch", id: "dv-avviso", checked: scelta.avvisoZona, onchange: (e) => {
+        scelta.avvisoZona = e.target.checked;
+        ricorda.scrivi("avviso-zona", e.target.checked || null);
+        zone.hidden = !e.target.checked;
+      } })),
+    zone);
 }
 
 // Impostazioni del timer HIIT: dalla scheda, modificabili per questa sessione.
@@ -311,6 +349,7 @@ function schermataRegistrazione(main) {
     stato1.textContent = [
       conGps ? (s.erroreGps && !s.ultimoGps ? `GPS: ${s.erroreGps}` : vecchio == null ? "GPS: cerco il segnale…" : vecchio > 15 ? `GPS: nessuna posizione da ${vecchio} s` : `GPS ±${Math.round(s.ultimoGps.precisione ?? 0)} m`) : null,
       testoFascia(),
+      s.avviso ? `Avviso fuori da Z${s.avviso.zona}` : null,
     ].filter(Boolean).join(" · ");
     fascione.hidden = !r.inPausa;
     fascione.textContent = r.pausaManuale ? "In pausa" : "Pausa automatica";

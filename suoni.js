@@ -45,3 +45,11 @@ export function programmaSegnali(segnali) {
   }
   return () => { for (const g of nodi) try { g.disconnect(); } catch { /* già finito */ } };
 }
+
+// Avviso di zona: due bip acuti se il battito è sopra la zona (rallenta), due gravi se è sotto (aumenta).
+export function segnaleZona(sopra) {
+  if (!suoniAttivi() || !sbloccaAudio()) return;
+  const t0 = ctx.currentTime + 0.05, f = sopra ? 1320 : 440;
+  bip(f, 0.15, t0);
+  bip(f, 0.15, t0 + 0.25);
+}

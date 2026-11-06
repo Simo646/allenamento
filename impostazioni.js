@@ -4,7 +4,8 @@ import { stato, registraVista, vai, rivai, testata, salvaProfilo, salvaSettimana
 import { PROFILO_PREDEFINITO, MODELLI_SETTIMANA, settimanaDaModello, etaDa, creaBackup, validaBackup, COLLEZIONI, GIORNI } from "./dati.js";
 import { calcolaZone, fcMaxDaEta, zoneDaCurva, validaLimiti, TIPI } from "./analisi-file.js";
 import { el, metti, oggi, numero, avviso, esito, conConferma, campo, ricorda, applicaTema, temaScuro } from "./util.js";
-import { nativo, condividiFile } from "./sorgenti.js";
+import { nativo, condividiFile, salute, saluteNelTelefono } from "./sorgenti.js";
+import { saluteAttiva, impostaSalute, importaDaSalute, testoImport } from "./salute.js";
 import { scartaInterrotta } from "./dal-vivo.js";
 import { mappePossibili, mappeAttive, impostaMappe, eliminaTutteLeMappe } from "./mappe.js";
 
@@ -215,9 +216,74 @@ registraVista("impostazioni", { vivo: false, render(main) {
     el("section", { class: "card modulo" }, el("h2", {}, "Attività"), sceltaAttivita(p, salvaSubito)),
     el("section", { class: "card modulo" }, el("h2", {}, "Moduli facoltativi"),
       interruttoriModuli(p, () => { recuperoBox.hidden = !p.moduli.sonno; salvaSubito(); }), recuperoBox),
+    cardSalute(),
     cardAspetto(),
     cardDati());
 } });
+
+/* ---------- Health Connect: notti e peso scritti da altre app (app Android, Android 14+) ---------- */
+function cardSalute() {
+  if (!saluteNelTelefono()) return null;
+  const VOCI = [["sonno", "sonno"], ["battito", "battito"], ["ossigeno", "ossigeno"], ["peso", "peso"]];
+  const esitoS = el("span", { class: "esito", role: "status" });
+  const permessi = el("p", { class: "sotto" });
+  const importa = el("button", { type: "button", class: "btn" }, "Importa adesso");
+  const gestisci = el("button", { type: "button", class: "lnk" }, "Permessi in Health Connect");
+  const azioni = el("div", { class: "azioni", hidden: !saluteAttiva() }, importa, gestisci);
+  const interruttore = el("input", { type: "checkbox", id: "i-salute", role: "switch", checked: saluteAttiva() });
+  const mostra = (st) => {
+    if (!st?.disponibile) {
+      interruttore.disabled = true;
+      permessi.textContent = "Health Connect non c'è su questo telefono: serve Android 14 o successivo.";
+      return;
+    }
+    const si = VOCI.filter(([k]) => st[k]).map(([, n]) => n), no = VOCI.filter(([k]) => !st[k]).map(([, n]) => n);
+    const u = ricorda.leggi("salute-ultimo");
+    permessi.textContent = !saluteAttiva() ? "" : [
+      si.length ? `Legge: ${si.join(", ")}.` : "Nessun permesso concesso.",
+      si.length && no.length ? `Senza permesso: ${no.join(", ")}.` : "",
+      u ? `Ultima importazione: ${new Date(u).toLocaleString("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}.` : "",
+    ].filter(Boolean).join(" ");
+  };
+  const aggiorna = () => salute.stato().then(mostra).catch(() => mostra(null));
+  const esegui = async () => {
+    importa.disabled = true;
+    esito(esitoS, "Leggo da Health Connect…");
+    try { esito(esitoS, testoImport(await importaDaSalute()), "ok"); }
+    catch (e) { esito(esitoS, "Non riuscito: " + (e?.message ?? "errore"), "err"); }
+    finally { importa.disabled = false; aggiorna(); }
+  };
+  interruttore.onchange = async () => {
+    if (!interruttore.checked) {
+      impostaSalute(false);
+      azioni.hidden = true;
+      esito(esitoS, "Importazione spenta: i dati già importati restano.");
+      return aggiorna();
+    }
+    interruttore.disabled = true;
+    let st = null;
+    try { st = await salute.chiediPermessi(); } catch { /* resta null */ }
+    interruttore.disabled = false;
+    if (!VOCI.some(([k]) => st?.[k])) {
+      interruttore.checked = false;
+      esito(esitoS, "Nessun permesso concesso: l'importazione resta spenta.", "err");
+      return mostra(st);
+    }
+    impostaSalute(true);
+    azioni.hidden = false;
+    await esegui();
+  };
+  importa.onclick = esegui;
+  gestisci.onclick = () => salute.apriImpostazioni().catch(() => esito(esitoS, "Non riesco ad aprire Health Connect.", "err"));
+  aggiorna();
+  return el("section", { class: "card modulo" }, el("h2", {}, "Health Connect"),
+    el("label", { class: "interruttore" },
+      el("span", {}, el("b", {}, "Notti e peso da Health Connect"),
+        el("small", {}, "Durata del sonno, battito e ossigeno nella notte e peso, da qualunque app li scriva lì (Mi Fitness, Zepp, Samsung Health, una bilancia…). Prima gli ultimi 30 giorni, poi a ogni apertura dell'app.")),
+      interruttore),
+    permessi, azioni, esitoS,
+    el("p", { class: "sotto" }, "L'app legge soltanto: non scrive in Health Connect e i dati restano su questo telefono. Notti e pesi inseriti a mano non vengono sovrascritti, si completano solo i valori che mancano. Per vederli servono i moduli Sonno, Ossigeno e Peso qui sopra."));
+}
 
 /* ---------- aspetto e mappe: valgono per questo telefono, si applicano subito ---------- */
 function cardAspetto() {
