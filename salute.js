@@ -10,7 +10,7 @@ import { dataLocale } from "./analisi-file.js";
 import { salute } from "./sorgenti.js";
 
 export const FONTE_SALUTE = "Health Connect";
-const VERSIONE = 3;              // alzarla quando cambia il calcolo: alla prossima apertura si reimporta tutto
+const VERSIONE = 4;              // alzarla quando cambia il calcolo: alla prossima apertura si reimporta tutto
 const MIN_NOTTE = 120;           // minuti di sonno perché un blocco conti come notte
 const PAUSA_MAX = 90 * 60000;    // sessioni separate da meno di così sono la stessa notte
 const SVEGLIO = new Set([1, 3, 7]); // fasi da sveglio di Health Connect: sveglio, fuori dal letto, sveglio a letto
@@ -59,13 +59,16 @@ export function nottiDaSessioni(sessioni = [], battito = [], ossigeno = [], { da
     const minuti = durata(tratti) / 60000;
     const d = dataLocale(new Date(b.fine));
     if (d < dalGiorno || minuti < MIN_NOTTE) continue;
-    if ((perData.get(d)?.minuti ?? 0) < minuti) perData.set(d, { minuti, tratti });
+    if ((perData.get(d)?.minuti ?? 0) < minuti) perData.set(d, { minuti, tratti, sessioni: unione(b.sessioni.map((s) => [s.inizio, s.fine])) });
   }
   const fc = [...battito].sort((x, y) => x[0] - y[0]), sp = [...ossigeno].sort((x, y) => x[0] - y[0]);
   const media = (v) => (v.length ? v.reduce((a, x) => a + x, 0) / v.length : null);
   const out = {};
-  for (const [d, { minuti, tratti }] of perData) {
-    const f = dentro(fc, tratti), o = dentro(sp, tratti);
+  // Prima i campioni nei tratti di sonno; se lì non ce n'è nessuno (fasi e misure non allineate, come con Mi
+  // Fitness), quelli di tutta la notte.
+  const nella = (campioni, tratti, sessioni) => { const v = dentro(campioni, tratti); return v.length ? v : dentro(campioni, sessioni); };
+  for (const [d, { minuti, tratti, sessioni }] of perData) {
+    const f = nella(fc, tratti, sessioni), o = nella(sp, tratti, sessioni);
     out[d] = {
       durata_min: Math.round(minuti),
       fc_sonno: f.length ? Math.round(media(f)) : null,
@@ -212,7 +215,7 @@ export async function importaDaSalute() {
   ricorda.scrivi("salute-versione", VERSIONE);
   const rip = (r?.riposo ?? []).filter((x) => x[1] > 0), bpm = rip.map((x) => x[1]);
   ricorda.scrivi("salute-letto", { conti: r?.conti ?? {}, sessioni: r?.sessioni?.length ?? 0, battito: r?.battito?.length ?? 0, ossigeno: r?.ossigeno?.length ?? 0,
-    notti: Object.values(notti).filter((n) => n.durata_min != null).length, permessoRiposo: !!permessi?.riposo,
+    notti: Object.values(notti).filter((n) => n.durata_min != null).length, conOssigeno: Object.values(notti).filter((n) => n.spo2_media != null).length, permessoRiposo: !!permessi?.riposo,
     riposo: rip.length ? { n: rip.length, giorni: Object.keys(riposo).length, media: Math.round(bpm.reduce((x, y) => x + y, 0) / bpm.length), min: Math.min(...bpm), max: Math.max(...bpm),
       ultimo: Math.max(...rip.map((x) => x[0])) } : null });
   const conta = (o) => Object.values(o).filter(Boolean).length;
@@ -255,7 +258,7 @@ export function riassuntoLettura() {
   if (l.riposo) righe.push(`Battito a riposo: media ${l.riposo.media} bpm (da ${l.riposo.min} a ${l.riposo.max}), ${n(l.riposo.n, "valore", "valori")} in ${n(l.riposo.giorni ?? l.riposo.n, "giorno", "giorni")}${l.riposo.ultimo ? `; l'ultimo del ${quando(l.riposo.ultimo)}` : ""}.`);
   else if (l.permessoRiposo) righe.push("Battito a riposo: nessuna app lo scrive in Health Connect.");
   if (!l.battito && !l.riposo && l.notti) righe.push("Quindi per il controllo del recupero il battito va inserito a mano: quello nel sonno o quello a riposo, dall'app dell'orologio.");
-  return { righe, nelSonno: `Nel sonno: ${n(l.battito, "misura", "misure")} di battito e ${l.ossigeno} di ossigeno; ${n(l.notti, "notte ricostruita", "notti ricostruite")} da ${n(l.sessioni, "sessione", "sessioni")}.` };
+  return { righe, nelSonno: `Nel sonno: ${n(l.battito, "misura", "misure")} di battito e ${l.ossigeno} di ossigeno; ${n(l.notti, "notte ricostruita", "notti ricostruite")} da ${n(l.sessioni, "sessione", "sessioni")}${l.conOssigeno != null ? `, ${l.conOssigeno} con l'ossigeno` : ""}.` };
 }
 
 // All'apertura dell'app, se l'importazione è accesa e l'ultima ha più di 3 ore (o è cambiato il calcolo). Restituisce
