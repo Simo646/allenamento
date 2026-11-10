@@ -16,7 +16,7 @@ export const PROFILO_PREDEFINITO = {
   zone: null, // [4 limiti]; null finché il primo avvio non è finito
   attivita: ["Forza", "HIIT", "Corsa", "Camminata", "Trekking", "Bici"],
   sottotipi_bici: ["Strada", "Gravel", "MTB"],
-  moduli: { sonno: false, ossigeno: false, peso: false },
+  moduli: { sonno: false, ossigeno: false, riposo: false, peso: false },
   recupero: { scarto_bpm: 3, notti: 14 },
   avvio_completato: false,
 };

@@ -45,4 +45,4 @@ giorno nella cartella Documenti › Allenamento del telefono (si può spegnere n
 
 ## Note
 
-Il lettore dei file FIT è il [Garmin FIT JavaScript SDK](https://www.npmjs.com/package/@garmin/fitsdk), caricato da jsDelivr alla prima apertura e soggetto alla licenza FIT di Garmin: l'app controlla che ogni file sia identico all'originale prima di usarlo. I caratteri sono Barlow e Barlow Semi Condensed (SIL Open Font License, testo in `fonti/`), inclusi nel sito.
+Il lettore dei file FIT è il [Garmin FIT JavaScript SDK](https://www.npmjs.com/package/@garmin/fitsdk), caricato da jsDelivr alla prima apertura e soggetto alla licenza FIT di Garmin: l'app controlla che ogni file sia identico all'originale prima di usarlo. I caratteri sono IBM Plex Sans e IBM Plex Mono (SIL Open Font License, testo in `fonti/`), inclusi nel sito.

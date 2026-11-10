@@ -462,7 +462,8 @@ function formManuale(param) {
 
 /* ---------- Notte ---------- */
 function moduloNotte(main, param) {
-  const sonno = modulo("sonno"), ossigeno = modulo("ossigeno");
+  const sonno = modulo("sonno"), ossigeno = modulo("ossigeno"), riposo = modulo("riposo");
+  const soloRiposo = riposo && !sonno && !ossigeno;
   const data = el("input", { id: "n-data", type: "date", value: param.data ?? oggi() });
   const inp = (id, ph) => el("input", { id, inputmode: "numeric", placeholder: ph });
   const c = { ore: inp("n-ore", "7"), min: inp("n-min", "30"), fc_sonno: inp("n-fc", "52"), fc_riposo: inp("n-riposo", "55"), spo2_min: inp("n-spo2-min", "92"), spo2_media: inp("n-spo2-media", "96"), spo2_max: inp("n-spo2-max", "99") };
@@ -501,12 +502,13 @@ function moduloNotte(main, param) {
   };
   conConferma(togli, "Tocca di nuovo per eliminare", async () => { await salvaGiorno("notti", data.value, null); avviso("Notte eliminata"); compila(); });
   metti(main, 
-    testata({ titolo: "Notte", sopra: "Registra", indietro: () => vai("oggi") }),
+    testata({ titolo: soloRiposo ? "Battito a riposo" : "Notte", sopra: "Registra", indietro: () => vai("oggi") }),
     el("section", { class: "card modulo" },
       el("p", { class: "sotto" }, "Copia i valori dall'app del tuo orologio o anello. Se la data c'è già, la aggiorni."),
-      campo("Mattina del", data),
+      campo(soloRiposo ? "Giorno" : "Mattina del", data),
       sonno ? el("div", { class: "righe" }, campo("Ore di sonno", c.ore), campo("Minuti", c.min)) : null,
       sonno ? el("div", { class: "righe" }, campo("Battito nel sonno", c.fc_sonno, "bpm, media"), campo("Battito a riposo", c.fc_riposo, "bpm")) : null,
+      riposo && !sonno ? el("div", { class: "righe" }, campo("Battito a riposo", c.fc_riposo, "bpm")) : null,
       sonno ? el("p", { class: "sotto" }, "Per il controllo del recupero basta uno dei due battiti: si usa quello nel sonno se c'è, altrimenti quello a riposo, sempre confrontato con la media della stessa misura.") : null,
       ossigeno ? el("div", { class: "righe" }, campo("SpO₂ minima", c.spo2_min, "%"), campo("SpO₂ media", c.spo2_media, "%"), campo("SpO₂ massima", c.spo2_max, "%")) : null,
       campo("Nota", nota),

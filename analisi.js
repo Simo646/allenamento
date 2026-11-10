@@ -176,14 +176,16 @@ registraVista("analisi", { vivo: true, render(main) {
 
   // Sonno e ossigeno
   const notti = stato.notti.filter((n) => n.data >= primo);
-  if (modulo("sonno")) {
-    const r = recupero(stato.notti, d, stato.profilo.recupero);
-    // Un grafico per misura (nel sonno, a riposo): la soglia sta su quella che usa il controllo di oggi.
-    const conDati = Object.keys(MISURE_RECUPERO).filter((k) => notti.some((n) => n[k] != null));
+  const sonnoOn = modulo("sonno"), riposoOn = modulo("riposo");
+  if (sonnoOn || riposoOn) {
+    const r = sonnoOn ? recupero(stato.notti, d, stato.profilo.recupero) : null;
+    // Un grafico per misura (nel sonno, a riposo): la soglia sta su quella che usa il controllo di oggi. Col modulo
+    // Battito a riposo il suo grafico c'è sempre, anche senza il modulo Sonno (allora senza soglia).
+    const conDati = Object.keys(MISURE_RECUPERO).filter((k) => (sonnoOn && notti.some((n) => n[k] != null)) || (riposoOn && k === "fc_riposo"));
     for (const k of conDati.length ? conDati : ["fc_sonno"]) {
-      const M = MISURE_RECUPERO[k], mia = r.misura === k;
+      const M = MISURE_RECUPERO[k], mia = r?.misura === k;
       const [c, g] = card(M.titolo, mia && r.soglia ? `Linea tratteggiata: la tua soglia di oggi, ${r.soglia} bpm (media ${fmtNum(r.media, 1)} + ${stato.profilo.recupero.scarto_bpm}).`
-        : mia ? `La soglia compare dopo 5 ${M.giorni}.` : `Oggi il controllo del recupero usa il ${MISURE_RECUPERO[r.misura].nome}.`);
+        : mia ? `La soglia compare dopo 5 ${M.giorni}.` : r ? `Oggi il controllo del recupero usa il ${MISURE_RECUPERO[r.misura].nome}.` : "Per giorno, in bpm.");
       sezioni.push(c);
       disegni.push(() => graficoLinea(g, {
         punti: notti.filter((n) => n[k] != null).map((n) => ({ data: n.data, v: n[k], extra: k === "fc_sonno" ? [[null, "Sonno", fmtDur(n.durata_min)]] : [] })),
@@ -191,13 +193,15 @@ registraVista("analisi", { vivo: true, render(main) {
       }));
     }
     const conDurata = notti.filter((n) => n.durata_min != null);
-    const [c2, g2] = card("Ore di sonno", "Per notte.");
-    sezioni.push(c2);
-    disegni.push(() => conDurata.length ? graficoColonne(g2, {
-      categorie: conDurata.map((n) => n.data), serie: [{ nome: "Sonno", colore: "var(--sonno)" }],
-      valore: (dd) => conDurata.find((n) => n.data === dd)?.durata_min ?? 0, etichettaX: (dd) => fmtData(dd, { day: "numeric", month: "short" }),
-      formato: { ...fmtMin, asse: (v) => `${fmtNum(v / 60, v % 60 ? 1 : 0)} h` }, titoloTip: fmtGiorno, conLegenda: false,
-    }) : vuoto(g2, "Nessuna notte con la durata nel periodo."));
+    if (sonnoOn) {
+      const [c2, g2] = card("Ore di sonno", "Per notte.");
+      sezioni.push(c2);
+      disegni.push(() => conDurata.length ? graficoColonne(g2, {
+        categorie: conDurata.map((n) => n.data), serie: [{ nome: "Sonno", colore: "var(--sonno)" }],
+        valore: (dd) => conDurata.find((n) => n.data === dd)?.durata_min ?? 0, etichettaX: (dd) => fmtData(dd, { day: "numeric", month: "short" }),
+        formato: { ...fmtMin, asse: (v) => `${fmtNum(v / 60, v % 60 ? 1 : 0)} h` }, titoloTip: fmtGiorno, conLegenda: false,
+      }) : vuoto(g2, "Nessuna notte con la durata nel periodo."));
+    }
   }
   if (modulo("ossigeno")) {
     const [c, g] = card("Ossigeno nel sonno", "SpO₂ per notte.");

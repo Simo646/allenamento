@@ -36,7 +36,7 @@ registraVista("oggi", { vivo: true, render(main) {
     striscia(d),
     cardProgramma(d, voci, fuori),
     azioniRapide(),
-    modulo("sonno") || modulo("ossigeno") ? cardRecupero(d) : null,
+    modulo("sonno") || modulo("ossigeno") || modulo("riposo") ? cardRecupero(d) : null,
     cardSettimana(d),
     cardUltimi());
 } });
@@ -175,12 +175,13 @@ function azioniRapide() {
   return el("div", { class: "azioni-rapide", role: "group", "aria-label": "Registra" },
     el("button", { type: "button", class: "btn primario grande largo", onclick: () => vai("dal-vivo", {}) }, "Registra sessione"),
     b("Importa file", () => vai("registra", { tipo: "file", data: oggi() })),
-    modulo("sonno") || modulo("ossigeno") ? b("+ Notte", () => vai("registra", { tipo: "notte", data: oggi() })) : null,
+    modulo("sonno") || modulo("ossigeno") ? b("+ Notte", () => vai("registra", { tipo: "notte", data: oggi() }))
+      : modulo("riposo") ? b("+ Battito a riposo", () => vai("registra", { tipo: "notte", data: oggi() })) : null,
     modulo("peso") ? b("+ Peso", () => vai("registra", { tipo: "peso", data: oggi() })) : null);
 }
 
 function cardRecupero(d) {
-  const sonno = modulo("sonno"), ossigeno = modulo("ossigeno");
+  const sonno = modulo("sonno"), ossigeno = modulo("ossigeno"), riposo = modulo("riposo");
   const notti = [...stato.notti].sort((a, b) => b.data.localeCompare(a.data));
   const stanotte = notti.find((n) => n.data === d);
   const ultima = stanotte ?? notti[0];
@@ -192,20 +193,33 @@ function cardRecupero(d) {
       el("b", {}, ultima?.[k] == null ? "—" : fmt(ultima[k]), unita ? el("em", {}, unita) : null),
       el("span", {}, m == null ? "" : `media ${fmt(m)}`));
   };
+  // Battito a riposo: l'ultimo giorno che lo ha (anche senza notte) e la media dei giorni prima.
+  const tileRiposo = () => {
+    const con = notti.filter((n) => n.fc_riposo != null && n.data <= d);
+    const u = con[0], prec = con.slice(1, 1 + stato.profilo.recupero.notti);
+    const m = prec.length ? prec.reduce((a, n) => a + n.fc_riposo, 0) / prec.length : null;
+    const altroGiorno = u && u.data !== (ultima?.data ?? d);
+    return el("div", { class: "tile" }, el("small", {}, "Battito a riposo"),
+      el("b", {}, u ? fmtNum(u.fc_riposo) : "—", el("em", {}, "bpm")),
+      el("span", {}, [m == null ? "" : `media ${fmtNum(m)}`, altroGiorno ? fmtData(u.data, { day: "numeric", month: "short" }) : ""].filter(Boolean).join(" · ")));
+  };
   const r = sonno ? recupero(stato.notti, d, stato.profilo.recupero) : null;
   const PILL = { ok: ["ok", "Via libera"], attenzione: ["attenzione", "Battito alto"], riduci: ["riduci", "Riduci il carico"], manca: ["neutro", "Manca la notte"], senzaFc: ["neutro", "Manca il battito"], dati: ["neutro", "Media in costruzione"] };
   const tiles = [
     sonno ? tile(MISURE_RECUPERO[r.misura].titolo, r.misura, "bpm") : null,
     sonno ? tile("Sonno", "durata_min", "h", fmtOre) : null,
     ossigeno ? tile("SpO₂ minima", "spo2_min", "%") : null,
-    ossigeno && !sonno ? tile("SpO₂ media", "spo2_media", "%") : null,
+    ossigeno && !sonno && !riposo ? tile("SpO₂ media", "spo2_media", "%") : null,
+    // Col modulo Sonno il battito a riposo può già essere la misura del recupero: niente doppione.
+    riposo && !(sonno && r.misura === "fc_riposo") ? tileRiposo() : null,
   ].filter(Boolean);
+  const titolo = sonno ? "Recupero" : ossigeno && riposo ? "Ossigeno e battito" : ossigeno ? "Ossigeno nel sonno" : "Battito a riposo";
   return el("section", { class: "card" },
-    el("div", { class: "card-testa" }, el("h2", {}, sonno ? "Recupero" : "Ossigeno nel sonno"),
+    el("div", { class: "card-testa" }, el("h2", {}, titolo),
       r ? el("span", { class: "pill " + PILL[r.stato][0] }, PILL[r.stato][1])
-        : el("button", { type: "button", class: "lnk", onclick: () => vai("registra", { tipo: "notte", data: d }) }, "Inserisci la notte")),
-    ultima ? el("p", { class: "sotto" }, ultima === stanotte ? "Stanotte" : "Ultima notte inserita: " + fmtData(ultima.data, { weekday: "short", day: "numeric", month: "short" })) : null,
-    el("div", { class: "tiles" + (tiles.length === 2 ? " due" : "") }, tiles),
+        : el("button", { type: "button", class: "lnk", onclick: () => vai("registra", { tipo: "notte", data: d }) }, sonno || ossigeno ? "Inserisci la notte" : "Inserisci")),
+    ultima && (sonno || ossigeno) ? el("p", { class: "sotto" }, ultima === stanotte ? "Stanotte" : "Ultima notte inserita: " + fmtData(ultima.data, { weekday: "short", day: "numeric", month: "short" })) : null,
+    el("div", { class: "tiles" + (tiles.length === 1 ? " uno" : tiles.length === 2 || tiles.length === 4 ? " due" : "") }, tiles),
     r ? el("p", { class: "sotto" }, r.testo + (r.soglia ? ` La tua media è ${fmtNum(r.media, 1)} bpm, soglia ${r.soglia}.` : "")) : null,
     r?.stato === "manca" || r?.stato === "senzaFc" ? el("button", { type: "button", class: "btn piccolo", style: "justify-self:start", onclick: () => vai("registra", { tipo: "notte", data: d }) }, "Inserisci la notte") : null);
 }
@@ -222,12 +236,18 @@ function cardSettimana(d) {
   });
   const perTipo = [...TIPI, "altro"].map((t) => [t, somma(sett.filter((s) => (TIPI.includes(s.tipo) ? s.tipo : "altro") === t), (s) => s.durata_min)]).filter(([, m]) => m > 0);
   const tot = somma(perTipo, ([, m]) => m);
+  // La zona in cui la settimana ha passato più tempo (a parità vince la più bassa).
+  const perZona = [1, 2, 3, 4, 5].map((z) => somma(sett, (s) => s[`z${z}_min`] ?? 0));
+  const zMax = perZona.reduce((best, m, i) => (m > perZona[best] ? i : best), 0);
+  const zona = perZona[zMax] > 0 ? zMax + 1 : null;
   return el("section", { class: "card" },
     el("div", { class: "card-testa" }, el("h2", {}, "Questa settimana"), previste ? el("span", { class: "sotto num" }, `${fatte} di ${previste} fatti`) : null),
     el("div", { class: "tiles" },
       el("div", { class: "tile" }, el("small", {}, "Tempo"), el("b", {}, fmtOre(tot), el("em", {}, "h"))),
       el("div", { class: "tile" }, el("small", {}, "Allenamenti"), el("b", {}, String(sett.length))),
-      el("div", { class: "tile" }, el("small", {}, "In Z2"), el("b", {}, fmtOre(somma(sett, (s) => s.z2_min)), el("em", {}, "h")))),
+      el("div", { class: "tile" }, el("small", {}, "Zona prevalente"),
+        el("b", {}, zona ? el("span", { class: "chip-zona tile-zona", style: `background:var(--z${zona});color:var(--z${zona}-ink)` }, `Z${zona}`) : "—"),
+        zona ? el("span", {}, fmtOre(perZona[zMax]) + " h") : null)),
     perTipo.length
       ? [el("div", { class: "barra-tipi" }, perTipo.map(([t, m]) => el("i", { style: `flex:${m};background:${coloreTipo(t)}` }))),
         el("div", { class: "legenda num" }, perTipo.map(([t, m]) => el("span", {}, el("i", { style: `background:${coloreTipo(t)}` }), `${t === "altro" ? "Altro" : t} ${fmtDur(m)}`)))]

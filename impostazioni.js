@@ -151,6 +151,7 @@ function interruttoriModuli(p, alCambio) {
   return el("div", {},
     voce("sonno", "Sonno e recupero", "Ore di sonno e battito (nel sonno o a riposo): ti avvisa quando è più alto del solito."),
     voce("ossigeno", "Ossigeno nel sonno", "SpO₂ minima, media e massima della notte."),
+    voce("riposo", "Battito a riposo", "Il battito a riposo di ogni giorno, con la media e il grafico."),
     voce("peso", "Peso", "Per seguire l'andamento nel tempo."));
 }
 
@@ -296,7 +297,7 @@ function cardSalute() {
         el("small", {}, "Durata del sonno, battito e ossigeno nella notte e peso, da qualunque app li scriva lì (Mi Fitness, Zepp, Samsung Health, una bilancia…). Prima gli ultimi 30 giorni, poi a ogni apertura dell'app.")),
       interruttore),
     permessi, letto, azioni, esitoS,
-    el("p", { class: "sotto" }, "L'app legge soltanto: non scrive in Health Connect e i dati restano su questo telefono. Notti e pesi inseriti a mano non vengono sovrascritti, si completano solo i valori che mancano. Per vederli servono i moduli Sonno, Ossigeno e Peso qui sopra."));
+    el("p", { class: "sotto" }, "L'app legge soltanto: non scrive in Health Connect e i dati restano su questo telefono. Notti e pesi inseriti a mano non vengono sovrascritti, si completano solo i valori che mancano. Per vederli servono i moduli Sonno, Ossigeno, Battito a riposo e Peso qui sopra."));
 }
 
 /* ---------- aspetto e mappe: valgono per questo telefono, si applicano subito ---------- */
