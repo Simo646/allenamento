@@ -246,15 +246,19 @@ export function riassumiXml(testo, { limiti, nomeFile = "" } = {}) {
 }
 
 /* ---------- calcoli comuni sui punti ---------- */
-export function riassumiPunti(punti, { limiti, attivi = null, inizio = punti[0]?.t, sogliaSalita } = {}) {
+// `pauseEscluse`: distanza e salita contano solo a timer acceso. Lo chiede la registrazione dal vivo, che prende le
+// posizioni anche in pausa; per i file restano come le dà la traccia (i dispositivi in pausa non registrano, e i pochi
+// metri fatti rallentando prima di una sosta sono strada vera).
+export function riassumiPunti(punti, { limiti, attivi = null, inizio = punti[0]?.t, sogliaSalita, pauseEscluse = false } = {}) {
   const attivo = (t) => !attivi || attivi.some(([a, b]) => t >= a && t < b);
+  const soloAttivi = pauseEscluse ? attivi : null;
   let secAttivi = 0;
   for (let i = 0; i < punti.length - 1; i++) {
     const dt = (punti[i + 1].t - punti[i].t) / 1000;
     if (dt > 0 && dt <= MAX_PASSO_S && attivo(punti[i].t)) secAttivi += dt;
   }
   const fc = punti.map((p) => p.fc).filter((x) => x != null && x > 30);
-  const km = distanzaGps(punti);
+  const km = distanzaGps(punti, soloAttivi);
   const velMedia = km != null && secAttivi > 0 ? arrotonda((km / secAttivi) * 3600, 1) : null;
   const vel = punti.map((p) => p.vel).filter((x) => x != null);
   const pow = punti.map((p) => p.pow).filter((x) => x != null);
@@ -262,7 +266,7 @@ export function riassumiPunti(punti, { limiti, attivi = null, inizio = punti[0]?
   return {
     durata_min: Math.round(secAttivi / 60),
     km,
-    salita_m: salitaDaQuote(punti, sogliaSalita),
+    salita_m: salitaDaQuote(punti, sogliaSalita, soloAttivi),
     fc_media: fc.length ? Math.round(media(fc)) : null,
     fc_max: fc.length ? Math.max(...fc) : null,
     ...(limiti ? tempoInZona(punti, limiti, attivi) : { z1_min: null, z2_min: null, z3_min: null, z4_min: null, z5_min: null }),
@@ -279,28 +283,45 @@ export function riassumiPunti(punti, { limiti, attivi = null, inizio = punti[0]?
   };
 }
 
-export function distanzaGps(punti) {
-  let m = 0, prec = null;
+// Il tratto in cui il timer correva all'istante t (estremi compresi): il suo numero, oppure -1 se era in pausa. Senza
+// `attivi` (file senza eventi del timer) vale tutto.
+const trattoDi = (attivi, t) => (attivi ? attivi.findIndex(([a, b]) => t >= a && t <= b) : 0);
+
+// Distanza lungo la traccia. Con `attivi` conta solo la strada fatta a timer acceso: non gli spostamenti in pausa (in
+// auto, in funivia), non il GPS che balla da fermi, non il salto tra il punto prima e quello dopo una pausa.
+export function distanzaGps(punti, attivi = null) {
+  let m = 0, prec = null, trattoPrec = -1;
   for (const p of punti) {
     if (p.lat == null || p.lon == null) continue;
-    if (prec) {
+    const tratto = trattoDi(attivi, p.t);
+    if (prec && tratto >= 0 && tratto === trattoPrec) {
       const d = haversine(prec, p), dt = (p.t - prec.t) / 1000;
       if (dt > 0 && d / dt < MAX_VEL_GPS) m += d;
     }
     prec = p;
+    trattoPrec = tratto;
   }
   return m > 0 ? arrotonda(m / 1000, 2) : null;
 }
 
-export function salitaDaQuote(punti, soglia = SOGLIA_SALITA_M) {
-  const quote = punti.map((p) => p.ele).filter((q) => q != null);
-  if (quote.length < 2) return null;
-  let salita = 0, rif = quote[0];
-  for (const q of quote) {
+// Salita con isteresi. Con `attivi` la quota cambiata durante una pausa non conta: alla ripresa il riferimento si
+// sposta di quanto è cambiata, così non si perde nemmeno la salita a metà di prima della pausa.
+export function salitaDaQuote(punti, soglia = SOGLIA_SALITA_M, attivi = null) {
+  let salita = 0, rif = null, ultima = null, trattoPrec = -1, n = 0;
+  for (const p of punti) {
+    const q = p.ele;
+    if (q == null) continue;
+    const tratto = trattoDi(attivi, p.t);
+    if (tratto < 0) continue;
+    n++;
+    if (rif == null) rif = q;
+    else if (tratto !== trattoPrec) rif += q - ultima;
+    ultima = q;
+    trattoPrec = tratto;
     if (q - rif >= soglia) { salita += q - rif; rif = q; }
     else if (rif - q >= soglia) rif = q;
   }
-  return Math.round(salita);
+  return n < 2 ? null : Math.round(salita);
 }
 
 // Salita dalle quote del terreno (modello digitale EU-DEM/SRTM) lungo la traccia, per i telefoni senza barometro: il GPS

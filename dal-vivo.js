@@ -21,11 +21,13 @@ const NOME_FASE = { preparazione: "Preparati", lavoro: "Lavoro", pausa: "Pausa",
 // Una sola registrazione alla volta, viva finché la pagina è aperta (anche cambiando vista).
 let s = null; // { rec, param, scelta, hiit, fascia, statoFascia, fermaSchermo, ultimoGps, erroreGps, salvataAlle, finita, riassunto }
 export const registrazioneInCorso = () => !!s?.rec?.avviata && !s.finita;
+// Finita ma non ancora salvata né scartata: Oggi la ricorda.
+export const registrazioneDaSalvare = () => !!s?.finita;
 
 // La fascia collegata nella preparazione resta collegata partendo: le misure vanno alla registrazione in corso oppure,
 // per la forza, alla scheda serie per serie (iniziaForza cambia il destinatario).
 const fasciaVerso = {};
-const versoRegistrazione = () => Object.assign(fasciaVerso, { misura: (m) => { s?.rec?.battito(m); controllaZona(m.t ?? Date.now()); }, stato: (st) => { if (s) s.statoFascia = st; } });
+const versoRegistrazione = () => Object.assign(fasciaVerso, { misura: (m) => { s?.rec?.battito(m); controllaZona(m.t ?? Date.now()); forseSalva(); }, stato: (st) => { if (s) s.statoFascia = st; } });
 versoRegistrazione();
 const colleghiFascia = () => collegaFascia((m) => fasciaVerso.misura?.(m), (st) => fasciaVerso.stato?.(st));
 
@@ -46,41 +48,52 @@ const gpsInSfondo = () => gpsAcceso((p) => { s?.rec.posizione(p); if (s) s.ultim
   .catch((e) => { if (s) s.erroreGps = e?.message ?? "GPS non disponibile"; });
 
 /* ---------- salvataggio della registrazione in corso ---------- */
-const db = () => new Promise((ok, ko) => {
+// Una sola connessione, riusata a ogni salvataggio (uno ogni 10 secondi per tutta la registrazione).
+let connessione = null;
+const db = () => (connessione ??= new Promise((ok, ko) => {
   const r = indexedDB.open("allenamento-dal-vivo", 1);
   r.onupgradeneeded = () => r.result.createObjectStore("corrente");
-  r.onsuccess = () => ok(r.result);
+  r.onsuccess = () => { r.result.onclose = r.result.onversionchange = () => { connessione = null; }; ok(r.result); };
   r.onerror = () => ko(r.error);
-});
+}).catch((e) => { connessione = null; throw e; }));
 async function salvaBozza(valore) {
   try {
     const d = await db();
-    await new Promise((ok, ko) => { const t = d.transaction("corrente", "readwrite"); valore ? t.objectStore("corrente").put(valore, "registrazione") : t.objectStore("corrente").delete("registrazione"); t.oncomplete = ok; t.onerror = () => ko(t.error); });
-  } catch { /* senza IndexedDB si perde solo la ripresa dopo una chiusura */ }
+    await new Promise((ok, ko) => {
+      const t = d.transaction("corrente", "readwrite");
+      valore ? t.objectStore("corrente").put(valore, "registrazione") : t.objectStore("corrente").delete("registrazione");
+      t.oncomplete = ok;
+      t.onerror = t.onabort = () => ko(t.error);
+    });
+  } catch { connessione = null; /* senza IndexedDB si perde solo la ripresa dopo una chiusura */ }
 }
 export async function leggiBozza() {
   try {
     const d = await db();
     return await new Promise((ok) => { const r = d.transaction("corrente").objectStore("corrente").get("registrazione"); r.onsuccess = () => ok(r.result ?? null); r.onerror = () => ok(null); });
-  } catch { return null; }
+  } catch { connessione = null; return null; }
+}
+function bozzaAttuale(ora) {
+  const hiit = s.hiit ? { imp: s.hiit.imp, esercizi: s.hiit.esercizi, salto: s.hiit.salto } : null;
+  return { rec: s.rec.serializza(), param: { scheda: s.scelta?.scheda ?? null, hiit, avvisoZona: s.avviso?.zona ?? null }, alle: ora };
 }
 function forseSalva(forza = false) {
   if (!s?.rec?.avviata || s.finita) return;
   const ora = Date.now();
   if (!forza && ora - (s.salvataAlle ?? 0) < 10000) return;
   s.salvataAlle = ora;
-  const hiit = s.hiit ? { imp: s.hiit.imp, esercizi: s.hiit.esercizi, salto: s.hiit.salto } : null;
-  salvaBozza({ rec: s.rec.serializza(), param: { scheda: s.scelta?.scheda ?? null, hiit, avvisoZona: s.avviso?.zona ?? null }, alle: ora });
+  salvaBozza(bozzaAttuale(ora));
 }
 
 // Ripresa di una registrazione interrotta (da Oggi): "riprendi" la continua, "salva" la chiude e mostra il riassunto.
+// Una bozza `finita` (app chiusa sulla schermata Fine, prima di salvare) si può solo salvare o scartare.
 export async function riprendiInterrotta(bozza, azione) {
   const p = bozza.param ?? {};
   const rec = Registratore.da(bozza.rec);
   s = { rec, param: {}, scelta: { tipo: rec.tipo, sottotipo: rec.sottotipo, scheda: p.scheda ?? p.voce?.scheda ?? null }, statoFascia: null,
     hiit: p.hiit ? conFasi(p.hiit) : null, avviso: p.avvisoZona ? { zona: p.avvisoZona, fuoriDa: null, direzione: 0, ultimo: 0 } : null };
   rec.pausa(bozza.alle);
-  if (azione === "salva") return finisci(bozza.alle);
+  if (azione === "salva" || bozza.finita) return finisci(bozza.alle);
   // Riparte in pausa: GPS di nuovo acceso, la fascia si ricollega dalla schermata, poi "Riprendi".
   if (rec.conGps && disponibile().gps) { await gpsInSfondo(); s.fermaBaro = await avviaBarometro((q) => s?.rec?.quota(q)); }
   s.fermaSchermo = await schermoAcceso(!!s.hiit);
@@ -354,6 +367,7 @@ function schermataRegistrazione(main) {
     fascione.hidden = !r.inPausa;
     fascione.textContent = r.pausaManuale ? "In pausa" : "Pausa automatica";
     pausa.textContent = r.pausaManuale ? "Riprendi" : "Pausa";
+    collega?.rinfresca();
     forseSalva();
   }
 
@@ -382,15 +396,33 @@ const oraInizio = (r) => new Date(r.inizio).toLocaleTimeString("it-IT", { hour: 
 const fcMedia = (r) => { const v = r.punti.filter((p) => p.fc).map((p) => p.fc); return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : null; };
 const testoFascia = () => (s.fascia ? (s.statoFascia === "persa" ? "Fascia: segnale perso, riprovo…" : `Fascia: ${s.fascia.nome}`) : "Senza fascia");
 
-// Fascia da collegare anche a registrazione iniziata (dopo una ripresa, o se all'inizio non c'era).
+// Fascia da collegare anche a registrazione iniziata (dopo una ripresa, o se all'inizio non c'era) e da ricollegare a
+// mano quando il segnale è perso: l'app riprova da sola, ma così si può anche sceglierne un'altra. Il pulsante si vede
+// solo quando serve; `rinfresca()` lo aggiorna a ogni secondo.
 function bottoneCollega(dopo) {
-  if (!disponibile().fascia || s.fascia) return null;
-  const b = el("button", { type: "button", class: "lnk" }, "Collega la fascia");
+  if (!disponibile().fascia) return null;
+  const b = el("button", { type: "button", class: "lnk", style: "justify-self:start" });
+  b.rinfresca = () => {
+    const persa = !!s?.fascia && s.statoFascia === "persa";
+    b.hidden = !!s?.fascia && !persa;
+    if (!b.disabled) b.textContent = persa ? "Ricollega la fascia" : "Collega la fascia";
+  };
   b.onclick = async () => {
     b.disabled = true;
-    try { s.fascia = await colleghiFascia(); b.remove(); dopo(); }
-    catch { b.disabled = false; }
+    b.textContent = "Cerco la fascia…";
+    try {
+      const vecchia = s.fascia;
+      s.fascia = null;
+      s.statoFascia = null;
+      try { await vecchia?.scollega?.(); } catch { /* era già staccata */ }
+      const nuova = await colleghiFascia();
+      if (s) s.fascia = nuova; else nuova.scollega?.(); // registrazione chiusa nel frattempo
+    } catch { /* nessuna fascia scelta o non trovata: si può riprovare */ }
+    b.disabled = false;
+    b.rinfresca();
+    dopo();
   };
+  b.rinfresca();
   return b;
 }
 
@@ -436,6 +468,7 @@ function schermataHiit(main) {
   salta.onclick = () => { const pos = posizioneHiit(); h.salto += inizioFaseDopo(h.fasi, pos) - pos; programmaBipHiit(); forseSalva(true); aggiorna(); };
   const fine = conConferma(el("button", { type: "button", class: "btn primario grande" }, "Fine"), "Tocca di nuovo", async () => finisci(Date.now()));
 
+  const collega = bottoneCollega(() => aggiorna());
   const tile = (k, v) => el("div", { class: "tile" }, el("small", {}, k), v);
   const tileBattito = tile("Battito", battito);
   const box = el("section", { class: "hiit" }, fase, conto, el("div", { class: "hiit-esercizio" }, etichetta, nome), poi);
@@ -460,6 +493,7 @@ function schermataHiit(main) {
     stato1.textContent = testoFascia();
     audio.textContent = suoniAttivi() ? "Audio sì" : "Audio no";
     pausa.textContent = r.pausaManuale ? "Riprendi" : "Pausa";
+    collega?.rinfresca();
     forseSalva();
   }
 
@@ -469,7 +503,7 @@ function schermataHiit(main) {
     box,
     el("div", { class: "tiles quattro" }, tile("Giro", giro), tile("Esercizio", esercizio), tile("Manca", resta), tileBattito),
     el("div", { style: "display:flex;justify-content:space-between;align-items:center;gap:12px" }, stato1, audio),
-    bottoneCollega(() => aggiorna()));
+    collega);
   mostraComandi([pausa, salta, fine]);
   programmaBipHiit();
   aggiorna();
@@ -490,7 +524,9 @@ async function finisci(t, { naturale = false } = {}) {
     s.extra = { hiit: { lavoro_s: imp.lavoro_s, pausa_s: imp.pausa_s, giri: imp.giri, recupero_giri_s: imp.recupero_giri_s, esercizi, giri_fatti: giriFatti } };
   }
   s.finita = true;
-  await salvaBozza(null);
+  // La bozza resta finché l'allenamento non è salvato o scartato: se l'app viene chiusa sulla schermata Fine (GPS e
+  // schermo acceso sono già spenti, il telefono può farlo), Oggi la ripropone da salvare.
+  await salvaBozza({ ...bozzaAttuale(t), finita: true });
   document.getElementById("nav").hidden = false;
   vai("dal-vivo", s.param);
 }
@@ -509,14 +545,16 @@ function schermataFine(main) {
     try {
       const k = km ? numero(km.value) : null;
       if (k > 0) Object.assign(r, { km: k, vel_media: r.durata_min ? Math.round((k / r.durata_min) * 600) / 10 : null });
-      const id = await salvaRiassunto(r, { voce: { tipo: r.tipo, scheda: s.scelta?.scheda ?? null }, nota: nota.value.trim(), extra: { ...s.extra, fatica } });
+      // `nuova`: una registrazione non va a sostituire un allenamento dello stesso tipo inserito a mano quel giorno.
+      const id = await salvaRiassunto(r, { voce: { tipo: r.tipo, scheda: s.scelta?.scheda ?? null }, nota: nota.value.trim(), extra: { ...s.extra, fatica }, nuova: true });
+      await salvaBozza(null);
       s = null;
       avviso("Allenamento salvato");
       vai("oggi");
       setTimeout(() => apriDettaglio(id), 300);
     } catch (e) { esito(esitoF, "Non salvato: " + (e?.message ?? "errore"), "err"); salva.disabled = false; }
   };
-  const scarta = conConferma(el("button", { type: "button", class: "btn pericolo" }, "Scarta"), "Tocca di nuovo: la perdi", async () => { s = null; avviso("Registrazione scartata"); vai("oggi"); });
+  const scarta = conConferma(el("button", { type: "button", class: "btn pericolo" }, "Scarta"), "Tocca di nuovo: la perdi", async () => { await salvaBozza(null); s = null; avviso("Registrazione scartata"); vai("oggi"); });
   const vuota = r.durata_min < 1 && !r.km;
   const tile = (k, v, u) => el("div", { class: "tile" }, el("small", {}, k), el("b", {}, v ?? "—", v != null && u ? el("em", {}, u) : null));
   metti(main,

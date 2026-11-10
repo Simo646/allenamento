@@ -26,7 +26,8 @@ le quote del terreno per il dislivello (si può spegnere nelle Impostazioni).
 
 Per non perderli, ogni tanto apri **Impostazioni › I tuoi dati › Esporta un backup** e salva il file in un posto
 privato (Drive, iCloud, Dropbox): contiene anche le tracce GPS, che mostrano da dove parti.
-Su un telefono nuovo, al primo avvio scegli **Importa un backup**.
+Su un telefono nuovo, al primo avvio scegli **Importa un backup**. L'app Android, in più, salva da sola una copia al
+giorno nella cartella Documenti › Allenamento del telefono (si può spegnere nelle Impostazioni).
 
 ## Cosa fa
 

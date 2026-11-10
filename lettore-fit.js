@@ -31,15 +31,41 @@ export function caricaLettoreFit() {
   return promessa;
 }
 
+// I file verificati restano sul dispositivo (Cache Storage "lettore-fit-<versione>"): dopo la prima volta i FIT si
+// importano anche senza rete e senza più chiamare jsDelivr. L'impronta si controlla a ogni uso, anche su quelli
+// tenuti da parte: un file cambiato non viene mai eseguito, si butta e si riscarica.
+const DEPOSITO = "lettore-fit-" + VERSIONE;
+const improntaDi = async (byte) => btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.digest("SHA-256", byte))));
+async function apriDeposito() {
+  try {
+    for (const k of await caches.keys()) if (k.startsWith("lettore-fit-") && k !== DEPOSITO) await caches.delete(k);
+    return await caches.open(DEPOSITO);
+  } catch { return null; } // senza deposito si scarica ogni volta, come prima
+}
+async function fileVerificato(deposito, nome, attesa) {
+  const url = BASE + nome;
+  try {
+    const tenuto = await deposito?.match(url);
+    if (tenuto) {
+      const byte = await tenuto.arrayBuffer();
+      if (await improntaDi(byte) === attesa) return byte;
+      await deposito.delete(url);
+    }
+  } catch { /* si scarica */ }
+  let risposta;
+  try { risposta = await fetch(url, { cache: "force-cache" }); } catch { risposta = null; }
+  if (!risposta?.ok) throw new Error("non riesco a scaricare il lettore FIT: controlla la connessione");
+  const byte = await risposta.arrayBuffer();
+  if (await improntaDi(byte) !== attesa) throw new Error("il lettore FIT scaricato non è quello originale: per sicurezza non lo uso");
+  deposito?.put(url, new Response(byte, { headers: { "content-type": "text/javascript" } })).catch(() => {});
+  return byte;
+}
+
 async function caricaVerificato() {
   const testi = {};
+  const deposito = await apriDeposito();
   await Promise.all(Object.entries(IMPRONTE).map(async ([nome, attesa]) => {
-    const risposta = await fetch(BASE + nome, { cache: "force-cache" });
-    if (!risposta.ok) throw new Error("non riesco a scaricare il lettore FIT: controlla la connessione");
-    const byte = await risposta.arrayBuffer();
-    const impronta = btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.digest("SHA-256", byte))));
-    if (impronta !== attesa) throw new Error("il lettore FIT scaricato non è quello originale: per sicurezza non lo uso");
-    testi[nome] = new TextDecoder().decode(byte);
+    testi[nome] = new TextDecoder().decode(await fileVerificato(deposito, nome, attesa));
   }));
   // Ogni file diventa un modulo da blob: con gli import relativi ("./x.js", "../src/x.js") puntati ai blob verificati.
   const indirizzi = {};

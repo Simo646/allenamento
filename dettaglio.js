@@ -65,11 +65,21 @@ export async function correggiDislivello(s) {
   return c.salita_m;
 }
 
+// Chiude il foglio di dettaglio se è aperto (tasto Indietro di Android). Restituisce true se ha chiuso qualcosa.
+let chiudiAperto = null;
+export function chiudiDettaglio() {
+  if (!chiudiAperto) return false;
+  chiudiAperto();
+  return true;
+}
+
 export function apriDettaglio(id) {
   const s = stato.sessioni.find((x) => x.id === id);
   if (!s) return;
   const velo = $("velo");
-  const chiudi = () => { velo.hidden = true; velo.replaceChildren(); document.removeEventListener("keydown", esc); };
+  const chiudi = () => { velo.hidden = true; velo.replaceChildren(); document.removeEventListener("keydown", esc); if (chiudiAperto === chiudi) chiudiAperto = null; };
+  chiudiAperto?.(); // un foglio alla volta
+  chiudiAperto = chiudi;
   const esc = (e) => { if (e.key === "Escape") chiudi(); };
   document.addEventListener("keydown", esc);
   velo.onclick = (e) => { if (e.target === velo) chiudi(); };
@@ -140,7 +150,10 @@ export function apriDettaglio(id) {
   salva.onclick = async () => {
     salva.disabled = true;
     try {
-      const nuovo = { ...s, nome: nome.value.trim(), nota: nota.value.trim(), tipo: tipo.value, sottotipo: tipo.value === "Bici" ? sottotipo.value || null : null,
+      // Si parte dall'allenamento com'è adesso, non da com'era aprendo il foglio: nel frattempo il dislivello può
+      // essere stato ricalcolato dal terreno.
+      const attuale = stato.sessioni.find((x) => x.id === s.id) ?? s;
+      const nuovo = { ...attuale, nome: nome.value.trim(), nota: nota.value.trim(), tipo: tipo.value, sottotipo: tipo.value === "Bici" ? sottotipo.value || null : null,
         ...Object.fromEntries(CAMPI_MODIFICABILI.map(([k]) => [k, numero(numeri[k].value)])), fatica };
       await stato.archivio.scrivi("sessioni", s.id, nuovo);
       esito(esitoD, "Salvato", "ok");
@@ -176,7 +189,13 @@ export function apriDettaglio(id) {
   foglio.querySelector(".chiudi").focus();
   // Il riquadro della salita si aggiorna se la salita viene ricalcolata aprendo l'allenamento.
   const tileSalita = [...(riquadri?.children ?? [])].find((t) => t.querySelector("small")?.textContent === "Salita");
-  caricaPesanti(s, pesanti, lim, (v) => { const b = tileSalita?.querySelector("b"); if (b?.firstChild) b.firstChild.textContent = fmtNum(v); });
+  // Anche la casella "Salita" della modifica, se non l'hai già cambiata a mano.
+  const salitaAperta = String(s.salita_m ?? "");
+  caricaPesanti(s, pesanti, lim, (v) => {
+    const b = tileSalita?.querySelector("b");
+    if (b?.firstChild) b.firstChild.textContent = fmtNum(v);
+    if (numeri.salita_m.value === salitaAperta) numeri.salita_m.value = v;
+  });
 }
 
 // Fatica percepita da 1 a 10 (scala di Borg CR10): serve al carico di allenamento quando il battito non basta.

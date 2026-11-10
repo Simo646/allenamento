@@ -16,7 +16,10 @@ export const pronto = () => VIVE.every((c) => stato.caricati.has(c));
 /* ---------- caricamento ---------- */
 export async function avvia() {
   try { stato.archivio = await apriArchivio(); }
-  catch (e) { stato.errore = "Non riesco ad aprire l'archivio dei dati. Ricarica la pagina."; console.error(e); programmaRender(); return; }
+  catch (e) {
+    stato.errore = window.Capacitor?.isNativePlatform?.() ? "Non riesco ad aprire l'archivio dei dati. Chiudi l'app e riaprila: i tuoi allenamenti sono al loro posto." : "Non riesco ad aprire l'archivio dei dati. Ricarica la pagina.";
+    console.error(e); programmaRender(); return;
+  }
   const a = stato.archivio;
   const segna = (c) => { stato.caricati.add(c); programmaRender(); };
   const errore = (e) => {

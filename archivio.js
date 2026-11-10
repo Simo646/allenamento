@@ -40,11 +40,12 @@ async function archivioBrowser() {
   let idb = null;
   try {
     idb = await new Promise((ok, ko) => {
+      let scaduto = false;
       const r = indexedDB.open("allenamento", 1);
       r.onupgradeneeded = () => r.result.createObjectStore("doc");
-      r.onsuccess = () => ok(r.result);
+      r.onsuccess = () => (scaduto ? r.result.close() : ok(r.result));
       r.onerror = () => ko(r.error);
-      setTimeout(() => ko(new Error("IndexedDB non risponde")), 4000);
+      setTimeout(() => { scaduto = true; ko(new Error("IndexedDB non risponde")); }, 10000);
     });
     const righe = await new Promise((ok, ko) => {
       const out = [];
@@ -59,7 +60,12 @@ async function archivioBrowser() {
       cache.get(c).set(id, v);
     }
     try { await navigator.storage?.persist?.(); } catch { /* il browser può rifiutare */ }
-  } catch { idb = null; }
+  } catch (e) {
+    // Nell'app Android l'archivio c'è sempre: se non si apre è un intoppo del momento, e partire "in memoria" farebbe
+    // sembrare l'app vuota (primo avvio). Meglio dirlo e far riaprire.
+    if (window.Capacitor?.isNativePlatform?.()) throw e;
+    idb = null;
+  }
 
   const docs = (c) => [...(cache.get(c)?.entries() ?? [])].map(([id, v]) => ({ ...structuredClone(v), id }));
   const notifica = (c) => { const d = docs(c); for (const cb of ascoltatori.get(c) ?? []) cb(d); };
@@ -68,8 +74,18 @@ async function archivioBrowser() {
     const t = idb.transaction("doc", "readwrite");
     v === undefined ? t.objectStore("doc").delete(k) : t.objectStore("doc").put(v, k);
     t.oncomplete = () => ok();
-    t.onerror = () => ko(t.error ?? new Error("Il browser non ha salvato i dati"));
+    // onabort: per esempio memoria del telefono piena. Senza, il salvataggio resterebbe in attesa per sempre.
+    t.onerror = t.onabort = () => ko(t.error ?? new Error("Il telefono non ha salvato i dati: forse la memoria è piena"));
   });
+  // Se il salvataggio su disco fallisce, il dato torna com'era: l'app non deve mostrare come salvato ciò che non lo è.
+  const conRipristino = async (c, id, prima, k, v) => {
+    try { await salva(k, v); }
+    catch (e) {
+      if (prima === undefined) cache.get(c)?.delete(id); else cache.get(c).set(id, prima);
+      notifica(c);
+      throw e;
+    }
+  };
   return {
     modo: idb ? "browser" : "memoria",
     ascolta(c, cb) {
@@ -83,14 +99,16 @@ async function archivioBrowser() {
     async scrivi(c, id, dati) {
       const corpo = senzaId(dati);
       if (!cache.has(c)) cache.set(c, new Map());
+      const prima = cache.get(c).get(id);
       cache.get(c).set(id, corpo);
       notifica(c);
-      await salva(`${c}/${id}`, corpo);
+      await conRipristino(c, id, prima, `${c}/${id}`, corpo);
     },
     async elimina(c, id) {
+      const prima = cache.get(c)?.get(id);
       cache.get(c)?.delete(id);
       notifica(c);
-      await salva(`${c}/${id}`, undefined);
+      if (prima !== undefined) await conRipristino(c, id, prima, `${c}/${id}`, undefined);
     },
   };
 }

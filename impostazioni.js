@@ -4,7 +4,7 @@ import { stato, registraVista, vai, rivai, testata, salvaProfilo, salvaSettimana
 import { PROFILO_PREDEFINITO, MODELLI_SETTIMANA, settimanaDaModello, etaDa, creaBackup, validaBackup, COLLEZIONI, GIORNI } from "./dati.js";
 import { calcolaZone, fcMaxDaEta, zoneDaCurva, validaLimiti, TIPI } from "./analisi-file.js";
 import { el, metti, oggi, numero, avviso, esito, conConferma, campo, ricorda, applicaTema, temaScuro } from "./util.js";
-import { nativo, condividiFile, salute, saluteNelTelefono } from "./sorgenti.js";
+import { nativo, condividiFile, salute, saluteNelTelefono, salvaCopia, DOVE_COPIE } from "./sorgenti.js";
 import { saluteAttiva, impostaSalute, importaDaSalute, testoImport, riassuntoLettura } from "./salute.js";
 import { scartaInterrotta } from "./dal-vivo.js";
 import { mappePossibili, mappeAttive, impostaMappe, eliminaTutteLeMappe } from "./mappe.js";
@@ -317,13 +317,31 @@ function cardAspetto() {
 /* ---------- dati: backup, ripristino, cancellazione ---------- */
 // Esporta il backup (nell'app Android con il pannello Condividi: Drive, Dropbox, File…). Restituisce [testo, tipo] per
 // l'esito; se va a buon fine segna la data, per il promemoria settimanale in Oggi.
+async function testoBackup() {
+  const dettagli = await stato.archivio.elenco("dettagli");
+  return JSON.stringify(creaBackup({ profilo: stato.profilo, settimana: stato.settimana, schede: Object.values(stato.schede), sessioni: stato.sessioni,
+    dettagli, notti: stato.nottiMesi, peso: stato.pesoMesi }));
+}
+
+// Copia automatica (app Android): lo stesso file del backup, scritto da solo in Documenti › Allenamento all'apertura
+// dell'app, al massimo una volta al giorno; restano le ultime 5 copie. Serve se l'app viene disinstallata o i suoi
+// dati cancellati; non se si perde il telefono: per quello resta il backup da esportare su Drive o Dropbox.
+export const copiaAutoAttiva = () => nativo() && ricorda.leggi("copia-auto") !== false;
+export async function copiaAutomatica() {
+  if (!copiaAutoAttiva() || !stato.sessioni.length) return;
+  const ultima = Date.parse(ricorda.leggi("copia-auto-ultima") ?? "") || 0;
+  if (Date.now() - ultima < 864e5) return;
+  try {
+    await salvaCopia(oggi(), await testoBackup());
+    ricorda.scrivi("copia-auto-ultima", new Date().toISOString());
+    ricorda.scrivi("copia-auto-errore", null);
+  } catch (e) { ricorda.scrivi("copia-auto-errore", String(e?.message ?? e).slice(0, 160)); }
+}
+
 export async function esportaBackup() {
   const fatto = (testo) => { ricorda.scrivi("ultimo-backup", new Date().toISOString()); return [testo, "ok"]; };
   try {
-    const dettagli = await stato.archivio.elenco("dettagli");
-    const backup = creaBackup({ profilo: stato.profilo, settimana: stato.settimana, schede: Object.values(stato.schede), sessioni: stato.sessioni,
-      dettagli, notti: stato.nottiMesi, peso: stato.pesoMesi });
-    const testo = JSON.stringify(backup);
+    const testo = await testoBackup();
     // App Android: il file va nel pannello Condividi (Drive, Dropbox, File…).
     if (nativo()) {
       try { await condividiFile(`allenamento-backup-${oggi()}.json`, testo); return fatto("Backup pronto: scegli dove salvarlo."); }
@@ -401,6 +419,29 @@ function cardDati() {
   };
   const ultimo = ricorda.leggi("ultimo-backup");
 
+  // Copia automatica sul telefono (solo app Android): interruttore, quando è stata fatta l'ultima, e l'errore se non
+  // è riuscita.
+  let copia = null;
+  if (nativo()) {
+    const statoCopia = el("p", { class: "sotto" });
+    const mostra = () => {
+      const u = ricorda.leggi("copia-auto-ultima"), err = ricorda.leggi("copia-auto-errore");
+      statoCopia.textContent = !copiaAutoAttiva() ? "" : err ? `L'ultima copia non è riuscita (${err}): riprovo alla prossima apertura.`
+        : u ? `Ultima copia: ${new Date(u).toLocaleDateString("it-IT", { day: "numeric", month: "long" })}, in ${DOVE_COPIE}.` : "La prima copia si fa alla prossima apertura dell'app.";
+    };
+    mostra();
+    copia = el("div", {},
+      el("label", { class: "interruttore" },
+        el("span", {}, el("b", {}, "Copia automatica sul telefono"),
+          el("small", {}, `Una volta al giorno, aprendo l'app, salva da sola una copia dei dati in ${DOVE_COPIE} (restano le ultime 5). Ti salva se l'app viene disinstallata; se perdi il telefono serve il backup qui sotto.`)),
+        el("input", { type: "checkbox", id: "i-copia", role: "switch", checked: copiaAutoAttiva(), onchange: async (e) => {
+          ricorda.scrivi("copia-auto", e.target.checked ? null : false);
+          if (e.target.checked) await copiaAutomatica();
+          mostra();
+        } })),
+      statoCopia);
+  }
+
   const [scegli, importa] = bloccoImporta(esitoD);
 
   const cancella = conConferma(el("button", { type: "button", class: "btn pericolo" }, "Cancella tutti i dati"), "Tocca di nuovo: cancello tutto", async () => {
@@ -419,6 +460,7 @@ function cardDati() {
 
   return el("section", { class: "card modulo" }, el("h2", {}, "I tuoi dati"),
     el("p", { class: "sotto" }, testoModo),
+    copia,
     el("div", { class: "azioni" }, esporta, scegli, importa),
     el("p", { class: "sotto" }, (ultimo ? `Ultimo backup: ${new Date(ultimo).toLocaleDateString("it-IT", { day: "numeric", month: "long" })}. ` : "Nessun backup ancora. ") +
       "Ogni 7 giorni Oggi te lo ricorda. Il backup contiene anche le tracce GPS, che mostrano da dove parti: salvalo in un posto privato e non condividerlo."),

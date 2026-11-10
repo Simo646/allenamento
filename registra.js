@@ -195,6 +195,8 @@ function moduloForza(main, param) {
     const lista = b.esercizi.map((e) => ({ nome: e.nome, recupero_s: e.recupero_s ?? null, ...(e.unita === "sec" ? { unita: "sec" } : {}),
       serie: serieDaSalvare(e, b).map(({ kg, rip, sec }) => (e.unita === "sec" ? { kg, sec } : { kg, rip })) })).filter((e) => e.serie.length);
     if (!lista.length) return esito(esitoF, "Compila almeno una serie con ripetizioni, secondi o chili.", "err");
+    // Sessione rimasta aperta (ripresa da Oggi ore o giorni dopo): il cronometro non dice più quanto è durata.
+    if (b.durata == null && b.inizioMs && Date.now() - b.inizioMs > 6 * 3600e3) return esito(esitoF, "La sessione è rimasta aperta per molte ore: scrivi qui sopra quanti minuti è durata.", "err");
     salva.disabled = true;
     try {
       const durata = b.durata ?? (b.inizioMs ? Math.max(1, Math.round((Date.now() - b.inizioMs) / 60000)) : null);
@@ -293,10 +295,11 @@ function moduloFile(main, param) {
 // Salva un allenamento riassunto da un file o da una registrazione dal vivo: documento leggero in sessioni, traccia e
 // curve in dettagli. Un allenamento con lo stesso inizio, o inserito a mano quel giorno, viene aggiornato. `extra`:
 // altri campi da salvare (per esempio i tempi del timer HIIT). Con la traccia si scarica subito la mappa, se non si
-// chiede `mappa: false` (import di molti file insieme: le mappe arrivano aprendo gli allenamenti).
+// chiede `mappa: false` (import di molti file insieme: le mappe arrivano aprendo gli allenamenti). Con `nuova` (le
+// registrazioni dal vivo) l'allenamento inserito a mano quel giorno resta com'è e questo si aggiunge.
 export async function salvaRiassunto(r, param = {}, presi = new Set()) {
   const stessa = (r.inizio && stato.sessioni.find((s) => s.inizio && s.inizio === r.inizio))
-    ?? stato.sessioni.find((s) => s.data === r.data && s.tipo === r.tipo && !s.inizio && !s.file);
+    ?? (param.nuova ? undefined : stato.sessioni.find((s) => s.data === r.data && s.tipo === r.tipo && !s.inizio && !s.file));
   const id = stessa?.id ?? idSessione(r.data, r.tipo, (x) => presi.has(x) || occupato(x));
   presi.add(id);
   const campi = { ...Object.fromEntries(CAMPI_FILE.map((c) => [c, r[c] ?? null])), ...(param.extra ?? {}) };
@@ -488,6 +491,7 @@ function moduloNotte(main, param) {
       spo2_min: numero(c.spo2_min.value), spo2_media: numero(c.spo2_media.value), spo2_max: numero(c.spo2_max.value), nota: nota.value.trim(),
     };
     if (!Object.entries(valori).some(([k, x]) => k !== "nota" && x != null)) return esito(esitoN, "Inserisci almeno un valore.", "err");
+    if (valori.durata_min != null && (valori.durata_min <= 0 || valori.durata_min > 24 * 60)) return esito(esitoN, "Il sonno deve durare più di zero e non più di 24 ore.", "err");
     if (fc != null && (fc < 30 || fc > 120)) return esito(esitoN, "Il battito nel sonno deve stare tra 30 e 120 bpm.", "err");
     if (fr != null && (fr < 30 || fr > 120)) return esito(esitoN, "Il battito a riposo deve stare tra 30 e 120 bpm.", "err");
     if ([valori.spo2_min, valori.spo2_media, valori.spo2_max].some((x) => x != null && (x < 70 || x > 100))) return esito(esitoN, "L'ossigeno va tra 70 e 100%.", "err");

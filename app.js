@@ -1,17 +1,17 @@
 // Avvio dell'app, vista Oggi ed elenco degli allenamenti. Le altre viste stanno nei loro moduli e si registrano da sole.
-import { stato, avvia, registraVista, vai, programmaRender, testata, coloreTipo, nomeTipo, iconaTipo, chipZona, modulo, descriviVoce, intervalloZona } from "./stato.js";
+import { stato, avvia, pronto, registraVista, vai, programmaRender, testata, coloreTipo, nomeTipo, iconaTipo, chipZona, modulo, descriviVoce, intervalloZona } from "./stato.js";
 import { GIORNI, vociDelGiorno, statoVoci, recupero, MISURE_RECUPERO } from "./dati.js";
 import { TIPI } from "./analisi-file.js";
 import { $, el, metti, icona, ICONE, oggi, piuGiorni, lunediDi, fmtData, fmtNum, fmtDur, fmtOre, somma, ricorda, applicaTema, conConferma, avviso, esito } from "./util.js";
-import { voceSessione, perData, metriche, apriDettaglio } from "./dettaglio.js";
+import { voceSessione, perData, metriche, apriDettaglio, chiudiDettaglio } from "./dettaglio.js";
 import { contenutoScheda } from "./schede.js";
 import "./settimana.js";
 import "./registra.js";
 import "./analisi.js";
-import { esportaBackup } from "./impostazioni.js";
-import { leggiBozza, riprendiInterrotta, scartaInterrotta, registrazioneInCorso } from "./dal-vivo.js";
+import { esportaBackup, copiaAutomatica } from "./impostazioni.js";
+import { leggiBozza, riprendiInterrotta, scartaInterrotta, registrazioneInCorso, registrazioneDaSalvare } from "./dal-vivo.js";
 import { scartaForza } from "./registra.js";
-import { nativo, fileInArrivo } from "./sorgenti.js";
+import { nativo, fileInArrivo, tastoIndietro } from "./sorgenti.js";
 import { importaSeServe } from "./salute.js";
 
 applicaTema(); // il tema scelto nelle Impostazioni, prima di disegnare
@@ -29,6 +29,7 @@ registraVista("oggi", { vivo: true, render(main) {
   metti(main, 
     testata({ titolo: "Oggi" }),
     bandaInterrotta(),
+    bandaDaSalvare(),
     bandaForza(),
     bandaAggiornamento(),
     bandaBackup(),
@@ -105,18 +106,28 @@ function rigaVoce(v) {
 }
 
 
-// Una registrazione rimasta a metà (app chiusa o telefono spento): riprenderla, salvarla o scartarla.
+// Una registrazione rimasta a metà (app chiusa o telefono spento): riprenderla, salvarla o scartarla. Se era già
+// finita ma non salvata (app chiusa sulla schermata Fine) si può solo salvare o scartare.
 function bandaInterrotta() {
   const b = stato.interrotta;
-  if (!b || registrazioneInCorso()) return null;
+  if (!b || registrazioneInCorso() || registrazioneDaSalvare()) return null;
   const quando = new Date(b.rec.inizio).toLocaleString("it-IT", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
   const chiudi = () => { stato.interrotta = null; programmaRender(); };
+  const nome = nomeTipo(b.rec.tipo, b.rec.sottotipo).toLowerCase();
   return el("section", { class: "banda", style: "display:grid;gap:8px" },
-    el("span", {}, `Registrazione di ${nomeTipo(b.rec.tipo, b.rec.sottotipo).toLowerCase()} interrotta (${quando}).`),
+    el("span", {}, b.finita ? `Registrazione di ${nome} finita ma non salvata (${quando}).` : `Registrazione di ${nome} interrotta (${quando}).`),
     el("div", { class: "azioni" },
-      el("button", { type: "button", class: "btn piccolo primario", onclick: () => { chiudi(); riprendiInterrotta(b, "riprendi"); } }, "Riprendi"),
-      el("button", { type: "button", class: "btn piccolo", onclick: () => { chiudi(); riprendiInterrotta(b, "salva"); } }, "Salva"),
+      b.finita ? null : el("button", { type: "button", class: "btn piccolo primario", onclick: () => { chiudi(); riprendiInterrotta(b, "riprendi"); } }, "Riprendi"),
+      el("button", { type: "button", class: "btn piccolo" + (b.finita ? " primario" : ""), onclick: () => { chiudi(); riprendiInterrotta(b, "salva"); } }, "Salva"),
       conConferma(el("button", { type: "button", class: "btn piccolo pericolo" }, "Scarta"), "Tocca di nuovo", async () => { await scartaInterrotta(); chiudi(); })));
+}
+
+// Registrazione finita in questa apertura dell'app e lasciata sulla schermata Fine senza salvarla né scartarla.
+function bandaDaSalvare() {
+  if (!registrazioneDaSalvare()) return null;
+  return el("section", { class: "banda", style: "display:grid;gap:8px" },
+    el("span", {}, "Hai una registrazione finita ma non ancora salvata."),
+    el("div", { class: "azioni" }, el("button", { type: "button", class: "btn piccolo primario", onclick: () => vai("dal-vivo", {}) }, "Aprila")));
 }
 
 // Una sessione di forza avviata e non ancora salvata (app chiusa o vista cambiata): riprenderla o scartarla.
@@ -299,5 +310,18 @@ fileInArrivo(async (file) => {
   vai("registra", { files: [file] });
 }, (testo) => avviso(testo));
 
-// Health Connect, se l'importazione è accesa: notti e peso nuovi a ogni apertura (al massimo ogni 3 ore).
-datiPronti().then(importaSeServe).then((testo) => { if (testo) avviso(testo); }).catch(() => { /* si riprova alla prossima apertura */ });
+// Health Connect, se l'importazione è accesa: notti e peso nuovi a ogni apertura (al massimo ogni 3 ore). Poi la copia
+// automatica dei dati sul telefono (al massimo una al giorno), così contiene anche quello che è appena arrivato.
+const tuttoPronto = () => new Promise((ok, ko) => { const prova = () => (pronto() ? ok() : stato.errore ? ko(new Error(stato.errore)) : setTimeout(prova, 200)); prova(); });
+datiPronti().then(importaSeServe).then((testo) => { if (testo) avviso(testo); }).catch(() => { /* si riprova alla prossima apertura */ })
+  .then(tuttoPronto).then(copiaAutomatica).catch(() => { /* si riprova alla prossima apertura */ });
+
+// Tasto e gesto Indietro di Android: chiude il dettaglio aperto, poi fa quello che fa la freccia in alto della vista,
+// poi dalle altre sezioni torna a Oggi. Da Oggi, o durante una registrazione, l'app va in secondo piano.
+tastoIndietro(() => {
+  if (chiudiDettaglio()) return true;
+  const freccia = document.querySelector('#vista .testata button[aria-label="Indietro"]');
+  if (freccia) { freccia.click(); return true; }
+  if (["settimana", "schede", "allenamenti", "analisi"].includes(stato.vista)) { vai("oggi"); return true; }
+  return false;
+});

@@ -37,6 +37,9 @@ export class Registratore {
     this.fonteQuota = null; // "barometro" | "gps": la quota con cui si conta la salita dal vivo
     this.quotaLiscia = null;
     this.tQuota = null;
+    this.ultimaQuota = null; // l'ultima quota contata per la salita
+    this.dopoPausa = false; // si riparte da una pausa: la quota cambiata nel frattempo non è salita
+    this.saltoDa = null;
     this.ultimaBaro = null;
     this.vel = null;
     this.ultimaPos = null;
@@ -54,7 +57,7 @@ export class Registratore {
     this.attivi = [[t, null]];
   }
   #ferma(t) { const u = this.attivi[this.attivi.length - 1]; if (u && u[1] == null) u[1] = Math.max(t, u[0]); }
-  #riparti(t) { const u = this.attivi[this.attivi.length - 1]; if (!u || u[1] != null) this.attivi.push([t, null]); }
+  #riparti(t) { const u = this.attivi[this.attivi.length - 1]; if (!u || u[1] != null) { this.attivi.push([t, null]); this.dopoPausa = true; } }
   pausa(t) { if (!this.avviata) return; this.pausaManuale = true; this.#ferma(t); }
   riprendi(t) {
     if (!this.avviata) return;
@@ -107,15 +110,20 @@ export class Registratore {
 
   // Salita dal vivo: col barometro la sua quota; senza, la quota GPS lisciata su circa 30 s.
   #salita(t, baro, gps) {
+    if (baro == null && gps == null) return;
+    const ripresa = this.dopoPausa;
+    this.dopoPausa = false;
     let q, fonte;
     if (baro != null) { q = baro; fonte = "barometro"; }
-    else if (gps != null) {
+    else {
+      // Dopo una pausa la quota lisciata riparte dal valore di adesso.
+      if (ripresa) { this.quotaLiscia = null; this.saltoDa = null; }
       // Salti della quota GPS (anche di 100 m e più): si ignorano; se il nuovo livello resta per 2 minuti si riparte da
       // lì senza contarlo come salita.
       if (this.fonteQuota === "gps" && this.quotaLiscia != null && Math.abs(gps - this.quotaLiscia) > 30) {
         this.saltoDa ??= t;
         if (t - this.saltoDa < 120000) return;
-        this.quotaLiscia = this.rifQuota = gps;
+        this.quotaLiscia = this.rifQuota = this.ultimaQuota = gps;
         this.saltoDa = null;
         return;
       }
@@ -124,8 +132,11 @@ export class Registratore {
       this.quotaLiscia = this.quotaLiscia == null || this.fonteQuota !== "gps" ? gps : this.quotaLiscia + (1 - Math.exp(-dt / 30)) * (gps - this.quotaLiscia);
       this.tQuota = t;
       q = this.quotaLiscia; fonte = "gps";
-    } else return;
-    if (fonte !== this.fonteQuota || this.rifQuota == null) { this.fonteQuota = fonte; this.rifQuota = q; return; }
+    }
+    if (fonte !== this.fonteQuota || this.rifQuota == null) { this.fonteQuota = fonte; this.rifQuota = this.ultimaQuota = q; return; }
+    // La quota cambiata durante la pausa (funivia, auto) non è salita: il riferimento si sposta di altrettanto.
+    if (ripresa && this.ultimaQuota != null) this.rifQuota += q - this.ultimaQuota;
+    this.ultimaQuota = q;
     const soglia = SOGLIA_SALITA[fonte];
     if (q - this.rifQuota >= soglia) { this.salita += q - this.rifQuota; this.rifQuota = q; }
     else if (this.rifQuota - q >= soglia) this.rifQuota = q;
@@ -148,8 +159,9 @@ export class Registratore {
   // Riassunto con gli stessi campi di un file importato.
   riassunto(limiti, t) {
     const attivi = this.attivi.map(([a, b]) => [a, b ?? t]);
-    const { punti, fonte, soglia } = quoteMigliori([...this.punti].sort((x, y) => x.t - y.t));
-    const base = riassumiPunti(punti, { limiti, attivi, inizio: this.inizio, sogliaSalita: soglia });
+    const { punti, fonte, soglia } = quoteMigliori([...this.punti].sort((x, y) => x.t - y.t), attivi);
+    // Le posizioni arrivano anche in pausa (la traccia le mostra), ma km e salita contano solo a timer acceso.
+    const base = riassumiPunti(punti, { limiti, attivi, inizio: this.inizio, sogliaSalita: soglia, pauseEscluse: true });
     const durS = attivi.reduce((s, [a, b]) => s + (b - a), 0) / 1000;
     return {
       ...base,
@@ -166,12 +178,12 @@ export class Registratore {
 
   // Per riprendere dopo una chiusura dell'app.
   serializza() {
-    const { tipo, sottotipo, scheda, conGps, autoPausa, inizio, punti, attivi, rr, pausaManuale, pausaAuto, km, salita, rifQuota, fonteQuota, quotaLiscia, tQuota, ultimaPos } = this;
-    return { tipo, sottotipo, scheda, conGps, autoPausa, inizio, punti, attivi, rr, pausaManuale, pausaAuto, km, salita, rifQuota, fonteQuota, quotaLiscia, tQuota, ultimaPos };
+    const { tipo, sottotipo, scheda, conGps, autoPausa, inizio, punti, attivi, rr, pausaManuale, pausaAuto, km, salita, rifQuota, fonteQuota, quotaLiscia, tQuota, ultimaQuota, dopoPausa, ultimaPos } = this;
+    return { tipo, sottotipo, scheda, conGps, autoPausa, inizio, punti, attivi, rr, pausaManuale, pausaAuto, km, salita, rifQuota, fonteQuota, quotaLiscia, tQuota, ultimaQuota, dopoPausa, ultimaPos };
   }
   static da(dati) {
     const r = new Registratore(dati);
-    for (const k of ["inizio", "punti", "attivi", "rr", "pausaManuale", "pausaAuto", "km", "salita", "rifQuota", "fonteQuota", "quotaLiscia", "tQuota", "ultimaPos"]) if (k in dati) r[k] = dati[k];
+    for (const k of ["inizio", "punti", "attivi", "rr", "pausaManuale", "pausaAuto", "km", "salita", "rifQuota", "fonteQuota", "quotaLiscia", "tQuota", "ultimaQuota", "dopoPausa", "ultimaPos"]) if (k in dati) r[k] = dati[k];
     return r;
   }
 }
@@ -179,7 +191,7 @@ export class Registratore {
 // Quote per il riassunto. Col barometro (se c'era per quasi tutta l'uscita) la sua quota relativa, portata al livello
 // medio del GPS; altrimenti la quota GPS lisciata su 60 s, senza le letture poco precise.
 const mediana = (v) => { const o = [...v].sort((a, b) => a - b); return o.length ? (o[(o.length - 1) >> 1] + o[o.length >> 1]) / 2 : NaN; };
-export function quoteMigliori(punti) {
+export function quoteMigliori(punti, attivi = null) {
   const conPos = punti.filter((p) => p.lat != null), conBaro = conPos.filter((p) => p.baro != null);
   if (conBaro.length >= 10 && conBaro.length >= 0.7 * conPos.length) {
     const scarto = mediana(conBaro.map((p) => p.ele).filter((q) => q != null)) - mediana(conBaro.map((p) => p.baro));
@@ -187,12 +199,25 @@ export function quoteMigliori(punti) {
     return { fonte: "barometro", soglia: SOGLIA_SALITA.barometro, punti: punti.map((p) => ({ ...p, ele: p.baro != null ? p.baro + s : null })) };
   }
   const buone = punti.filter((p) => p.ele != null && !(p.pq > PRECISIONE_QUOTA_MAX_M));
+  // La media non mescola le quote di prima e di dopo una pausa, né quelle prese in pausa: ogni tratto (a timer acceso
+  // o fermo) si liscia da solo. `tratto` numera i tratti accesi da 0 e quelli fermi con numeri negativi.
+  const tratto = (t) => {
+    let n = 0;
+    for (const [a, b] of attivi ?? []) { if (t < a) break; if (t <= b) return n; n++; }
+    return attivi ? -1 - n : 0;
+  };
   const lisce = new Map();
-  for (let i = 0, a = 0, b = 0, somma = 0; i < buone.length; i++) {
-    const t = buone[i].t;
-    while (b < buone.length && buone[b].t <= t + 30000) somma += buone[b++].ele;
-    while (buone[a].t < t - 30000) somma -= buone[a++].ele;
-    lisce.set(buone[i], somma / (b - a));
+  for (let da = 0; da < buone.length;) {
+    const k = tratto(buone[da].t);
+    let fine = da + 1;
+    while (fine < buone.length && tratto(buone[fine].t) === k) fine++;
+    for (let i = da, a = da, b = da, somma = 0; i < fine; i++) {
+      const t = buone[i].t;
+      while (b < fine && buone[b].t <= t + 30000) somma += buone[b++].ele;
+      while (buone[a].t < t - 30000) somma -= buone[a++].ele;
+      lisce.set(buone[i], somma / (b - a));
+    }
+    da = fine;
   }
   return { fonte: "gps", soglia: SOGLIA_SALITA.gps, punti: punti.map((p) => ({ ...p, ele: lisce.get(p) ?? null })) };
 }

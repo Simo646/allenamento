@@ -59,19 +59,20 @@ async function componi({ z, x0, y0, w, h }) {
 }
 
 /* ---------- archivio delle mappe sul telefono ---------- */
-const db = () => new Promise((ok, ko) => {
+let connessione = null; // una sola, riusata
+const db = () => (connessione ??= new Promise((ok, ko) => {
   const r = indexedDB.open("allenamento-mappe", 1);
   r.onupgradeneeded = () => r.result.createObjectStore("mappe");
-  r.onsuccess = () => ok(r.result);
+  r.onsuccess = () => { r.result.onclose = r.result.onversionchange = () => { connessione = null; }; ok(r.result); };
   r.onerror = () => ko(r.error);
-});
+}).catch((e) => { connessione = null; throw e; }));
 async function archivio(modo, f) {
   const d = await db();
   return new Promise((ok, ko) => {
     const t = d.transaction("mappe", modo);
     const r = f(t.objectStore("mappe"));
     t.oncomplete = () => ok(r?.result);
-    t.onerror = () => ko(t.error);
+    t.onerror = t.onabort = () => ko(t.error ?? new Error("mappa non salvata"));
   });
 }
 

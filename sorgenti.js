@@ -72,7 +72,9 @@ export const apriImpostazioniPosizione = () => { if (nativo()) plugin("Backgroun
 
 /* ---------- fascia cardio ---------- */
 // Collega una fascia Bluetooth (servizio standard Heart Rate). onMisura({t, fc, rr, contatto}); onStato("connessa" |
-// "persa" | "ricollegata"). Se la fascia si stacca riprova da sola per qualche minuto. Restituisce {nome, scollega}.
+// "persa" | "ricollegata"). Se la fascia si stacca riprova da sola finché non la scolleghi: ogni 5 secondi per i primi
+// minuti, poi ogni 30 per non consumare batteria. Restituisce {nome, scollega}.
+const pausaTentativo = (i) => attesa(i < 40 ? 5000 : 30000);
 export async function collegaFascia(onMisura, onStato) {
   if (finta()) return fasciaFinta(onMisura, onStato);
   if (nativo()) return fasciaNativa(onMisura, onStato);
@@ -94,7 +96,7 @@ async function fasciaNativa(onMisura, onStato) {
   if (!acceso) await ble.requestEnable().catch(() => { throw new Error("Accendi il Bluetooth e riprova."); });
   const dev = await ble.requestDevice({ services: [SERVIZIO_FC] });
   const id = dev.deviceId;
-  let attiva = true, ascoltoMisure = null;
+  let attiva = true, ascoltoMisure = null, ascoltoStacco = null, ricollegando = false;
   const ascolta = async () => {
     await ascoltoMisure?.remove?.();
     ascoltoMisure = await ble.addListener(`notification|${id}|${SERVIZIO_FC}|${MISURA_FC}`, (ev) => {
@@ -103,15 +105,26 @@ async function fasciaNativa(onMisura, onStato) {
     });
     await ble.startNotifications({ deviceId: id, service: SERVIZIO_FC, characteristic: MISURA_FC });
   };
+  // Un solo giro di tentativi alla volta, anche se la fascia si stacca di nuovo mentre si sta ricollegando.
   const ricollega = async () => {
-    for (let i = 0; attiva && i < 40; i++) {
-      try { await ble.connect({ deviceId: id, timeout: 10000 }); await ascolta(); onStato("ricollegata"); return; }
-      catch { await attesa(5000); }
+    if (ricollegando) return;
+    ricollegando = true;
+    for (let i = 0; attiva; i++) {
+      try {
+        await ble.connect({ deviceId: id, timeout: 10000 });
+        if (!attiva) { ble.disconnect({ deviceId: id }).catch(() => {}); break; } // scollegata nel frattempo
+        await ascolta();
+        onStato("ricollegata");
+        break;
+      } catch { await pausaTentativo(i); }
     }
+    ricollegando = false;
   };
-  await ble.addListener(`disconnected|${id}`, () => { if (attiva) { onStato("persa"); ricollega(); } });
-  await ble.connect({ deviceId: id, timeout: 15000 });
-  await ascolta();
+  ascoltoStacco = await ble.addListener(`disconnected|${id}`, () => { if (attiva) { onStato("persa"); ricollega(); } });
+  try {
+    await ble.connect({ deviceId: id, timeout: 15000 });
+    await ascolta();
+  } catch (e) { attiva = false; ascoltoStacco?.remove?.(); throw e; }
   onStato("connessa");
   return {
     nome: dev.name || "Fascia cardio",
@@ -119,7 +132,7 @@ async function fasciaNativa(onMisura, onStato) {
       attiva = false;
       try { await ble.stopNotifications({ deviceId: id, service: SERVIZIO_FC, characteristic: MISURA_FC }); } catch { /* già staccata */ }
       try { await ble.disconnect({ deviceId: id }); } catch { /* già staccata */ }
-      await ascoltoMisure?.remove?.();
+      try { await ascoltoMisure?.remove?.(); await ascoltoStacco?.remove?.(); } catch { /* già tolti */ }
     },
   };
 }
@@ -134,12 +147,16 @@ async function fasciaBrowser(onMisura, onStato) {
     car.addEventListener("characteristicvaluechanged", (e) => onMisura({ t: Date.now(), ...leggiMisuraFc(e.target.value) }));
     await car.startNotifications();
   };
+  let ricollegando = false;
   dev.addEventListener("gattserverdisconnected", async () => {
     if (!attiva) return;
     onStato("persa");
-    for (let i = 0; attiva && i < 40; i++) {
-      try { await avvia(); onStato("ricollegata"); return; } catch { await attesa(5000); }
+    if (ricollegando) return;
+    ricollegando = true;
+    for (let i = 0; attiva; i++) {
+      try { await avvia(); onStato("ricollegata"); break; } catch { await pausaTentativo(i); }
     }
+    ricollegando = false;
   });
   await avvia();
   onStato("connessa");
@@ -149,6 +166,7 @@ async function fasciaBrowser(onMisura, onStato) {
 function fasciaFinta(onMisura, onStato) {
   const f = window.__fasciaFinta;
   const id = setInterval(() => { const fc = typeof f === "function" ? f(Date.now()) : 130; onMisura({ t: Date.now(), fc, rr: [60 / fc], contatto: true }); }, 1000);
+  window.__fasciaFintaStato = onStato; // le prove possono fingere che la fascia si stacchi
   onStato("connessa");
   return { nome: "Fascia di prova", async scollega() { clearInterval(id); } };
 }
@@ -181,7 +199,7 @@ export async function notificaZona(titolo, testo) {
   const n = plugin("LocalNotifications");
   try {
     canaleZona ??= n.createChannel({ id: "zona", name: "Avvisi di zona", description: "Battito fuori dalla zona scelta durante la registrazione", importance: 4, vibration: true, visibility: 1 });
-    await canaleZona;
+    try { await canaleZona; } catch { canaleZona = null; } // la prossima volta si riprova a crearlo
     await n.schedule({ notifications: [{ id: 7001, title: titolo, body: testo, channelId: "zona", smallIcon: "ic_registrazione" }] });
   } catch { /* senza permesso delle notifiche restano i bip */ }
 }
@@ -210,6 +228,34 @@ export async function salvaFile(nome, testo, { tipo = "application/octet-stream"
   setTimeout(() => URL.revokeObjectURL(a.href), 10000);
 }
 
+/* ---------- copia automatica del backup, in Documenti/Allenamento del telefono (app Android) ---------- */
+// Un file per giorno; restano le ultime `tieni` copie. Android lascia toccare solo i file creati da questa
+// installazione: quelli di un'installazione precedente restano dove sono, e se il nome è già preso se ne usa un altro.
+const CARTELLA_COPIE = "Allenamento";
+export const DOVE_COPIE = "Documenti › Allenamento";
+export async function salvaCopia(giorno, testo, tieni = 5) {
+  const fs = plugin("Filesystem");
+  const scrivi = (nome) => fs.writeFile({ path: `${CARTELLA_COPIE}/${nome}`, data: testo, directory: "DOCUMENTS", encoding: "utf8", recursive: true });
+  try { await scrivi(`allenamento-copia-${giorno}.json`); }
+  catch { await scrivi(`allenamento-copia-${giorno}-${Date.now().toString(36)}.json`); }
+  try {
+    const { files } = await fs.readdir({ path: CARTELLA_COPIE, directory: "DOCUMENTS" });
+    const vecchie = files.map((f) => f.name).filter((n) => /^allenamento-copia-\d{4}-\d{2}-\d{2}(-\w+)?\.json$/.test(n)).sort().slice(0, -tieni);
+    for (const n of vecchie) await fs.deleteFile({ path: `${CARTELLA_COPIE}/${n}`, directory: "DOCUMENTS" }).catch(() => {});
+  } catch { /* senza elenco restano anche le copie vecchie */ }
+}
+
+/* ---------- tasto e gesto Indietro di Android ---------- */
+// Il plugin nativo Indietro avvisa la pagina; `gestisci()` dice se l'app ha fatto qualcosa (chiuso un foglio, tornata
+// alla vista di prima). Se no, l'app va in secondo piano come con il tasto Home: una registrazione in corso continua.
+// Su 127.0.0.1 le prove chiamano window.__indietro().
+export function tastoIndietro(gestisci) {
+  if (location.hostname === "127.0.0.1") window.__indietro = gestisci;
+  if (!nativo()) return;
+  const p = plugin("Indietro");
+  p.addListener("indietro", () => { let fatto = false; try { fatto = gestisci(); } catch { /* si esce */ } if (!fatto) p.esci().catch(() => {}); }).catch(() => {});
+}
+
 /* ---------- file aperti o condivisi da altre app (FIT, GPX, TCX) ---------- */
 // L'app Android compare in "Apri con" e "Condividi" per questi file: il plugin nativo FileInArrivo li legge e qui
 // diventano File come quelli scelti a mano. Se il nome non ha l'estensione giusta (capita con alcune app), il formato si
@@ -229,7 +275,7 @@ export function fileInArrivo(onFile, onErrore) {
       const byte = Uint8Array.from(atob(r.dati), (c) => c.charCodeAt(0));
       let nome = String(r.nome || "allenamento").split(/[\/]/).pop();
       const formato = formatoDa(byte);
-      if (formato && !new RegExp(`\.${formato}$`, "i").test(nome)) nome = `${nome.replace(/\.[^.]*$/, "")}.${formato}`;
+      if (formato && !nome.toLowerCase().endsWith("." + formato)) nome = `${nome.replace(/\.[^.]*$/, "")}.${formato}`;
       onFile(new File([byte], nome, { type: r.tipo || "application/octet-stream" }));
     } catch (e) { onErrore?.(e?.message ?? "file non letto"); }
   };
