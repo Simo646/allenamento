@@ -71,7 +71,7 @@ export async function avviaBarometro(onQuota) {
 export const apriImpostazioniPosizione = () => { if (nativo()) plugin("BackgroundGeolocation").openSettings().catch(() => {}); };
 
 /* ---------- fascia cardio ---------- */
-// Collega una fascia Bluetooth (servizio standard Heart Rate). onMisura({t, fc, rr, contatto}); onStato("connessa" |
+// Collega una fascia Bluetooth (servizio standard Heart Rate). onMisura({t, fc, contatto}); onStato("connessa" |
 // "persa" | "ricollegata"). Se la fascia si stacca riprova da sola finché non la scolleghi: ogni 5 secondi per i primi
 // minuti, poi ogni 30 per non consumare batteria. Restituisce {nome, scollega}.
 const pausaTentativo = (i) => attesa(i < 40 ? 5000 : 30000);
@@ -165,7 +165,7 @@ async function fasciaBrowser(onMisura, onStato) {
 
 function fasciaFinta(onMisura, onStato) {
   const f = window.__fasciaFinta;
-  const id = setInterval(() => { const fc = typeof f === "function" ? f(Date.now()) : 130; onMisura({ t: Date.now(), fc, rr: [60 / fc], contatto: true }); }, 1000);
+  const id = setInterval(() => { const fc = typeof f === "function" ? f(Date.now()) : 130; onMisura({ t: Date.now(), fc, contatto: true }); }, 1000);
   window.__fasciaFintaStato = onStato; // le prove possono fingere che la fascia si stacchi
   onStato("connessa");
   return { nome: "Fascia di prova", async scollega() { clearInterval(id); } };

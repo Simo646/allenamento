@@ -1,7 +1,7 @@
 // Registrazione dal vivo, senza DOM né dispositivi: riceve posizioni e misure della fascia, gestisce pause manuali e
 // automatiche, tiene i numeri da mostrare durante l'allenamento e alla fine produce lo stesso riassunto dei file
 // importati (riassumiPunti di analisi-file.js). Lo usano dal-vivo.js e la forza in registra.js; i test lo provano in node.
-import { riassumiPunti, rmssdDaRr, zonaDi, dataLocale } from "./analisi-file.js";
+import { riassumiPunti, zonaDi, dataLocale } from "./analisi-file.js";
 
 const PRECISIONE_MAX_M = 30; // posizioni meno precise si scartano
 const MAX_VEL_GPS = 25; // m/s: oltre è un salto del GPS
@@ -28,7 +28,6 @@ export class Registratore {
     this.inizio = null;
     this.punti = [];
     this.attivi = []; // [[inizio, fine|null], ...] in ms
-    this.rr = [];
     this.pausaManuale = false;
     this.pausaAuto = false;
     this.km = 0;
@@ -142,12 +141,11 @@ export class Registratore {
     else if (this.rifQuota - q >= soglia) this.rifQuota = q;
   }
 
-  // Una misura della fascia {t, fc, rr}. Senza GPS (forza, HIIT), o se il GPS tace, il battito è un punto da solo.
-  battito({ t, fc, rr = [] }) {
+  // Una misura della fascia {t, fc}. Senza GPS (forza, HIIT), o se il GPS tace, il battito è un punto da solo.
+  battito({ t, fc }) {
     if (!(fc > 25 && fc < 240)) return;
     this.ultimoFc = { t, fc };
     if (!this.avviata) return;
-    if (!this.inPausa) this.rr.push(...rr);
     if (!this.conGps || !this.ultimaPos || t - this.ultimaPos.t > 2000)
       this.punti.push({ t, lat: null, lon: null, ele: null, vel: null, fc, cad: null, pow: null, dist: null });
   }
@@ -170,7 +168,6 @@ export class Registratore {
       durata_min: Math.round(durS / 60),
       vel_media: base.km && durS ? Math.round((base.km / durS) * 36000) / 10 : null,
       calorie: null, temp_media: null,
-      rmssd_ms: rmssdDaRr(this.rr),
       salita_da: base.salita_m != null ? fonte : null,
       fonte: "Registrata con l'app", file: null,
     };
@@ -178,12 +175,12 @@ export class Registratore {
 
   // Per riprendere dopo una chiusura dell'app.
   serializza() {
-    const { tipo, sottotipo, scheda, conGps, autoPausa, inizio, punti, attivi, rr, pausaManuale, pausaAuto, km, salita, rifQuota, fonteQuota, quotaLiscia, tQuota, ultimaQuota, dopoPausa, ultimaPos } = this;
-    return { tipo, sottotipo, scheda, conGps, autoPausa, inizio, punti, attivi, rr, pausaManuale, pausaAuto, km, salita, rifQuota, fonteQuota, quotaLiscia, tQuota, ultimaQuota, dopoPausa, ultimaPos };
+    const { tipo, sottotipo, scheda, conGps, autoPausa, inizio, punti, attivi, pausaManuale, pausaAuto, km, salita, rifQuota, fonteQuota, quotaLiscia, tQuota, ultimaQuota, dopoPausa, ultimaPos } = this;
+    return { tipo, sottotipo, scheda, conGps, autoPausa, inizio, punti, attivi, pausaManuale, pausaAuto, km, salita, rifQuota, fonteQuota, quotaLiscia, tQuota, ultimaQuota, dopoPausa, ultimaPos };
   }
   static da(dati) {
     const r = new Registratore(dati);
-    for (const k of ["inizio", "punti", "attivi", "rr", "pausaManuale", "pausaAuto", "km", "salita", "rifQuota", "fonteQuota", "quotaLiscia", "tQuota", "ultimaQuota", "dopoPausa", "ultimaPos"]) if (k in dati) r[k] = dati[k];
+    for (const k of ["inizio", "punti", "attivi", "pausaManuale", "pausaAuto", "km", "salita", "rifQuota", "fonteQuota", "quotaLiscia", "tQuota", "ultimaQuota", "dopoPausa", "ultimaPos"]) if (k in dati) r[k] = dati[k];
     return r;
   }
 }

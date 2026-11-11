@@ -94,16 +94,15 @@ export function apriDettaglio(id) {
     ["FC media", s.fc_media, "bpm"], ["FC massima", s.fc_max, "bpm"],
     ["Cadenza", s.cadenza_media, s.tipo === "Corsa" ? "ppm" : "rpm"],
     ["Potenza media", s.potenza_media, "W"], ["Potenza normalizzata", s.potenza_np, "W"],
-    ["Calorie", s.calorie, "kcal"], ["Temperatura", s.temp_media, "°C"], ["Variabilità (RMSSD)", s.rmssd_ms, "ms"],
+    ["Calorie", s.calorie, "kcal"], ["Temperatura", s.temp_media, "°C"],
     s.esercizi?.length ? ["Volume", fmtNum(volumeSessione(s)), "kg"] : null,
     (() => { const c = caricoSessione(s); return c.carico ? [c.da === "stima" ? "Carico (stima)" : "Carico", fmtNum(c.carico), "pt"] : null; })(),
   ].filter((c) => c && c[1] != null);
   const car = caricoSessione(s);
-  const spiega = car.carico || s.rmssd_ms != null ? el("details", { class: "spiega" }, el("summary", {}, "Cosa vogliono dire carico e variabilità"),
-    car.carico ? el("p", { class: "sotto" }, `Carico: quanto ha pesato l'allenamento, in punti (1 punto ≈ 1 minuto in Z2; le zone alte pesano di più). `
+  const spiega = car.carico ? el("details", { class: "spiega" }, el("summary", {}, "Cosa vuol dire il carico"),
+    el("p", { class: "sotto" }, `Carico: quanto ha pesato l'allenamento, in punti (1 punto ≈ 1 minuto in Z2; le zone alte pesano di più). `
       + { battito: "Qui viene dal tempo in zona del battito.", fatica: `Qui viene dalla durata e dalla fatica percepita (${s.fatica}).`, stima: "Qui è stimato dalla durata e dal tipo, perché mancano battito e fatica percepita: segnala la fatica in Modifica per renderlo preciso." }[car.da]
-      + " Sommato giorno per giorno dà le linee di Carico e forma in Analisi.") : null,
-    s.rmssd_ms != null ? el("p", { class: "sotto" }, "Variabilità (RMSSD): di quanto cambia la distanza tra un battito e il successivo, in millisecondi, dagli intervalli R-R della fascia. A riposo, al mattino, è un indice di recupero (più alta = più riposato). Durante lo sforzo scende a pochi ms e dipende soprattutto dall'intensità e dalla qualità del contatto della fascia: tra un allenamento e l'altro non è un confronto affidabile.") : null) : null;
+      + " Sommato giorno per giorno dà le linee di Carico e forma in Analisi.")) : null;
   // Griglia senza buchi: l'ultimo campo si allarga sulle colonne rimaste vuote.
   const colonne = campi.length === 4 ? 2 : Math.min(3, campi.length);
   const avanzo = campi.length % colonne;

@@ -202,7 +202,7 @@ function moduloForza(main, param) {
       const durata = b.durata ?? (b.inizioMs ? Math.max(1, Math.round((Date.now() - b.inizioMs) / 60000)) : null);
       // Con la fascia collegata: battito medio e massimo, zone e curva misurati invece di quelli scritti a mano.
       const misure = !esistente && fasciaForza?.rec.punti.length > 30 ? fasciaForza.rec.riassunto(limiti(), Date.now()) : null;
-      const battito = misure ? { fc_media: misure.fc_media, fc_max: misure.fc_max, z1_min: misure.z1_min, z2_min: misure.z2_min, z3_min: misure.z3_min, z4_min: misure.z4_min, z5_min: misure.z5_min, rmssd_ms: misure.rmssd_ms } : {};
+      const battito = misure ? { fc_media: misure.fc_media, fc_max: misure.fc_max, z1_min: misure.z1_min, z2_min: misure.z2_min, z3_min: misure.z3_min, z4_min: misure.z4_min, z5_min: misure.z5_min } : {};
       const base = { tipo: "Forza", data: b.data, scheda: b.scheda, esercizi: lista, durata_min: durata, fc_media: b.fc_media, fc_max: b.fc_max, fatica: b.fatica ?? null, nota: (b.nota ?? "").trim(), ...battito };
       // Se quel giorno c'è già una forza importata da file senza esercizi, le serie vanno lì (battito e zone restano).
       const daFile = !esistente && !misure && stato.sessioni.find((s) => s.data === b.data && s.tipo === "Forza" && !s.esercizi?.length);

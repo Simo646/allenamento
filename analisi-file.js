@@ -79,7 +79,7 @@ export function zonaDi(fc, limiti) {
 // Leggeri: nel documento dell'allenamento, caricati all'avvio.
 export const CAMPI_FILE = ["inizio", "durata_min", "km", "salita_m", "fc_media", "fc_max",
   "z1_min", "z2_min", "z3_min", "z4_min", "z5_min",
-  "vel_media", "vel_max", "cadenza_media", "potenza_media", "potenza_max", "potenza_np", "calorie", "temp_media", "rmssd_ms",
+  "vel_media", "vel_max", "cadenza_media", "potenza_media", "potenza_max", "potenza_np", "calorie", "temp_media",
   "indoor", "fonte", "file", "salita_da"];
 // Pesanti: in dettagli/<id>, caricati solo aprendo l'allenamento.
 export const CAMPI_DETTAGLIO = ["curva_fc", "curve", "traccia"];
@@ -120,7 +120,6 @@ export function riassumiFit(messages, { limiti, nomeFile = "" } = {}) {
     potenza_np: s.normalizedPower ?? base.potenza_np,
     calorie: s.totalCalories ?? null,
     temp_media: s.avgTemperature ?? null,
-    rmssd_ms: rmssd(messages.hrvMesgs),
     fonte: "File FIT" + (produttore ? " · " + nomeProduttore(produttore) : ""), salita_da: null,
     file: nomeFile,
   };
@@ -140,35 +139,16 @@ export function intervalliTimer(eventi = []) {
   return out;
 }
 
-// Variabilità del battito (RMSSD) dagli intervalli R-R, se la fascia li ha registrati.
-const rmssd = (hrv) => rmssdDaRr((hrv ?? []).flatMap((m) => m.time ?? []));
-
 // Una misura della fascia cardio via Bluetooth (servizio standard Heart Rate, caratteristica 0x2A37): primo byte di
-// opzioni, battito a 8 o 16 bit, eventuale energia spesa, poi gli intervalli R-R in 1/1024 di secondo.
+// opzioni, battito a 8 o 16 bit (il resto, energia spesa e intervalli R-R, non serve).
 export function leggiMisuraFc(dv) {
   const opzioni = dv.getUint8(0);
   const a16 = opzioni & 0x01;
-  let i = 1;
-  const fc = a16 ? dv.getUint16(i, true) : dv.getUint8(i);
-  i += a16 ? 2 : 1;
+  const fc = a16 ? dv.getUint16(1, true) : dv.getUint8(1);
   const contatto = opzioni & 0x04 ? !!(opzioni & 0x02) : null; // null: la fascia non lo dice
-  if (opzioni & 0x08) i += 2; // energia spesa, non serve
-  const rr = [];
-  if (opzioni & 0x10) for (; i + 1 < dv.byteLength; i += 2) rr.push(dv.getUint16(i, true) / 1024);
-  return { fc, rr, contatto };
+  return { fc, contatto };
 }
 
-// RMSSD in millisecondi da una lista di intervalli R-R in secondi.
-export function rmssdDaRr(lista = []) {
-  const rr = lista.filter((x) => x > 0.25 && x < 2.5);
-  if (rr.length < 30) return null;
-  let somma = 0, n = 0;
-  for (let i = 1; i < rr.length; i++) {
-    const d = (rr[i] - rr[i - 1]) * 1000;
-    if (Math.abs(d) < 250) { somma += d * d; n++; } // scarta i battiti persi
-  }
-  return n ? Math.round(Math.sqrt(somma / n)) : null;
-}
 
 const nomeProduttore = (m) => ({ wahooFitness: "Wahoo", garmin: "Garmin", coros: "Coros", polarElectro: "Polar", suunto: "Suunto", zwift: "Zwift", strava: "Strava", hammerhead: "Hammerhead", bryton: "Bryton", magene: "Magene" })[m] ?? String(m);
 
@@ -238,7 +218,7 @@ export function riassumiXml(testo, { limiti, nomeFile = "" } = {}) {
     km: base.km ?? (l.metri ? arrotonda(l.metri / 1000, 2) : null),
     fc_media: base.fc_media ?? l.fcMediaGiri ?? null,
     fc_max: base.fc_max ?? l.fcMaxGiri ?? null,
-    calorie: l.calorie ?? null, temp_media: null, rmssd_ms: null,
+    calorie: l.calorie ?? null, temp_media: null,
     nome_file: l.nome ?? null,
     fonte: tcx ? "File TCX" : "File GPX", salita_da: null,
     file: nomeFile,
