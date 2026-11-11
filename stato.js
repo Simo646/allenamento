@@ -89,10 +89,13 @@ export function vai(nome, param = {}) {
 }
 
 // Ridisegna la stessa vista con nuovi parametri senza tornare in cima (per i moduli che cambiano forma).
+// I grafici (Analisi) si disegnano nel frame dopo il render: finché mancano la pagina è più corta, quindi la posizione
+// si rimette anche dopo di loro, se no il browser la sposta più in basso per tenere fermo il contenuto.
 export function rivai(nome, param) {
   const y = window.scrollY;
   vai(nome, param);
   window.scrollTo({ top: y });
+  requestAnimationFrame(() => window.scrollTo({ top: y }));
 }
 
 let raf = 0;

@@ -149,9 +149,9 @@ function interruttoriModuli(p, alCambio) {
     el("span", {}, el("b", {}, titolo), el("small", {}, testo)),
     el("input", { type: "checkbox", id: "m-" + k, role: "switch", checked: !!p.moduli[k], onchange: (e) => { p.moduli = { ...p.moduli, [k]: e.target.checked }; alCambio(); } }));
   return el("div", {},
-    voce("sonno", "Sonno e recupero", "Ore di sonno e battito (nel sonno o a riposo): ti avvisa quando è più alto del solito."),
+    voce("sonno", "Sonno", "Ore di sonno e battito nel sonno."),
     voce("ossigeno", "Ossigeno nel sonno", "SpO₂ minima, media e massima della notte."),
-    voce("riposo", "Battito a riposo", "Il battito a riposo di ogni giorno, con la media e il grafico."),
+    voce("riposo", "Battito a riposo", "Il battito a riposo di ogni giorno."),
     voce("peso", "Peso", "Per seguire l'andamento nel tempo."));
 }
 
@@ -196,12 +196,14 @@ registraVista("impostazioni", { vivo: false, render(main) {
 
   // Attività e moduli: si salvano subito.
   const salvaSubito = async () => { try { await salvaProfilo({ ...stato.profilo, attivita: p.attivita, moduli: p.moduli, recupero: p.recupero }); avviso("Salvato"); } catch (e) { avviso("Non salvato: " + (e?.message ?? "errore")); } };
-  const recuperoBox = el("div", { class: "righe" },
-    campo("Avviso sopra la media di (bpm)", el("select", { id: "r-scarto", onchange: (e) => { p.recupero = { ...p.recupero, scarto_bpm: Number(e.target.value) }; salvaSubito(); } },
-      [2, 3, 4, 5, 6, 8].map((n) => el("option", { value: n, selected: p.recupero.scarto_bpm === n }, `+${n}`)))),
-    campo("Media sulle ultime", el("select", { id: "r-notti", onchange: (e) => { p.recupero = { ...p.recupero, notti: Number(e.target.value) }; salvaSubito(); } },
-      [7, 14, 28].map((n) => el("option", { value: n, selected: p.recupero.notti === n }, `${n} notti`)))));
-  recuperoBox.hidden = !p.moduli.sonno;
+  const recuperoBox = el("div", {},
+    el("p", { class: "sotto" }, "Controllo del recupero: con Sonno o Battito a riposo l'app ti avvisa quando il battito (nel sonno o a riposo) è più alto della tua media."),
+    el("div", { class: "righe" },
+      campo("Avviso sopra la media di (bpm)", el("select", { id: "r-scarto", onchange: (e) => { p.recupero = { ...p.recupero, scarto_bpm: Number(e.target.value) }; salvaSubito(); } },
+        [2, 3, 4, 5, 6, 8].map((n) => el("option", { value: n, selected: p.recupero.scarto_bpm === n }, `+${n}`)))),
+      campo("Media sulle ultime", el("select", { id: "r-notti", onchange: (e) => { p.recupero = { ...p.recupero, notti: Number(e.target.value) }; salvaSubito(); } },
+        [7, 14, 28].map((n) => el("option", { value: n, selected: p.recupero.notti === n }, `${n} notti`))))));
+  recuperoBox.hidden = !p.moduli.sonno && !p.moduli.riposo;
 
   metti(main, 
     testata({ titolo: "Impostazioni", sopra: stato.profilo.nome || "Il tuo profilo", indietro: torna }),
@@ -216,7 +218,7 @@ registraVista("impostazioni", { vivo: false, render(main) {
       el("div", { class: "azioni" }, salvaP, esitoP), ricalcola),
     el("section", { class: "card modulo" }, el("h2", {}, "Attività"), sceltaAttivita(p, salvaSubito)),
     el("section", { class: "card modulo" }, el("h2", {}, "Moduli facoltativi"),
-      interruttoriModuli(p, () => { recuperoBox.hidden = !p.moduli.sonno; salvaSubito(); }), recuperoBox),
+      interruttoriModuli(p, () => { recuperoBox.hidden = !p.moduli.sonno && !p.moduli.riposo; salvaSubito(); }), recuperoBox),
     cardSalute(),
     cardAspetto(),
     cardDati());

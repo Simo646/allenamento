@@ -412,5 +412,5 @@ body.con-barra .schede-nav{display:none}
 .giudizio-forma.ok b{color:var(--ok)}
 .giudizio-forma.warn b{color:var(--warn)}
 .tile small .dot{margin-right:4px}
-.letto-salute summary{cursor:pointer;font-weight:700;font-size:14px}
-.letto-salute p{margin:6px 0 0}
+.letto-salute summary,.spiega summary{cursor:pointer;font-weight:700;font-size:14px}
+.letto-salute p,.spiega p{margin:6px 0 0}

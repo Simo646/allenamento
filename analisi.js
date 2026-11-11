@@ -1,6 +1,6 @@
 // Analisi: volume e zone per settimana, distanze, andamento per attività, forza per esercizio, sonno, ossigeno, peso.
 import { stato, registraVista, rivai, testata, coloreTipo, nomeTipo, modulo, limiti, intervalloZona, ZONE } from "./stato.js";
-import { recupero, CARDIO, testoSerie, MISURE_RECUPERO } from "./dati.js";
+import { recupero, CARDIO, testoSerie, MISURE_RECUPERO, misureAttive } from "./dati.js";
 import { TIPI, volume, massimale } from "./analisi-file.js";
 import { el, metti, oggi, piuGiorni, lunediDi, fmtData, fmtGiorno, fmtNum, fmtDur, fmtKg, fmtSec, somma } from "./util.js";
 import { COLORE_ZONA, graficoColonne, graficoLinea, graficoIntervalli, graficoForma, vuoto } from "./grafici.js";
@@ -59,15 +59,22 @@ registraVista("analisi", { vivo: true, render(main) {
     const giudizio = giudizioForma(u, forma.length);
     const stimati = sess.filter((s) => caricoSessione(s).da === "stima").length;
     const segno = (v) => { const n = Math.round(v); return (n > 0 ? "+" : "") + fmtNum(n); };
-    const tile = (k, v, colore) => el("div", { class: "tile" }, el("small", {}, colore ? el("i", { class: "dot", style: `background:${colore}` }) : null, k), el("b", { class: "num" }, v));
+    const tile = (k, v, colore, sotto) => el("div", { class: "tile" }, el("small", {}, colore ? el("i", { class: "dot", style: `background:${colore}` }) : null, k), el("b", { class: "num" }, v), el("span", {}, sotto));
     const g = el("div");
+    const ore = (u.forma * 7) / 60;
     sezioni.push(el("section", { class: "card" }, el("h2", {}, "Carico e forma"),
       el("div", { class: "tiles riquadri", style: "grid-template-columns:repeat(3,minmax(0,1fr))" },
-        tile("Forma di fondo", fmtNum(u.forma), "var(--forma)"), tile("Fatica", fmtNum(u.fatica), "var(--fatica)"), tile("Bilancio", segno(u.bilancio))),
+        tile("Forma di fondo", fmtNum(u.forma), "var(--forma)", "6 settimane"), tile("Fatica", fmtNum(u.fatica), "var(--fatica)", "7 giorni"), tile("Bilancio", segno(u.bilancio), null, "forma − fatica")),
       el("p", { class: "giudizio-forma " + giudizio.livello }, el("b", {}, giudizio.stato), giudizio.testo),
       g,
-      el("p", { class: "sotto" }, "Carico dal tempo in zona (le zone alte pesano di più); per la forza e senza fascia dalla fatica percepita. Forma di fondo: ultime 6 settimane; fatica: ultima settimana. È una tendenza, non una misura precisa."
-        + (stimati ? ` ${stimati === 1 ? "Un allenamento del periodo ha" : `${stimati} allenamenti del periodo hanno`} il carico stimato: segna la fatica percepita per renderlo più preciso.` : ""))));
+      el("p", { class: "sotto" }, "Blu: quanto ti alleni di solito. Arancione: quanto ti sei allenato nell'ultima settimana. Arancione sopra il blu = più del solito."
+        + (stimati ? ` ${stimati === 1 ? "Un allenamento del periodo ha" : `${stimati} allenamenti del periodo hanno`} il carico stimato: segna la fatica percepita per renderlo più preciso.` : "")),
+      el("details", { class: "spiega" }, el("summary", {}, "Come si legge"),
+        el("p", { class: "sotto" }, "Punti di carico: 1 punto ≈ 1 minuto in Z2. Le zone alte pesano di più: un minuto in Z1 vale ½ punto, in Z3 1½, in Z4 2, in Z5 2½. Per la forza, e quando manca la fascia, conta la fatica percepita (3 vale come Z2, 7 come Z4); se manca anche quella, una stima per tipo di allenamento."),
+        el("p", { class: "sotto" }, `Forma di fondo (blu): i punti medi al giorno delle ultime 6 settimane circa, cioè quanto sei abituato ad allenarti. Sale e scende piano. Ora è ${fmtNum(u.forma)}: come fare ${fmtNum(u.forma)} minuti in Z2 ogni giorno, circa ${fmtNum(ore, ore < 10 ? 1 : 0)} ore a settimana.`),
+        el("p", { class: "sotto" }, "Fatica (arancione): la stessa media, ma sull'ultima settimana. Sale subito dopo allenamenti duri e cala in pochi giorni di riposo."),
+        el("p", { class: "sotto" }, "Bilancio = forma − fatica. Negativo (arancione sopra il blu): ti alleni più del solito e accumuli fatica; è normale nei periodi in cui costruisci. Positivo (arancione sotto): ti alleni meno del solito e recuperi. Il giudizio confronta il bilancio con la forma: da −20% a +10% sei in equilibrio, oltre −50% molto affaticato."),
+        el("p", { class: "sotto" }, "I giorni senza allenamento valgono zero punti. È una tendenza per capire la direzione, non una misura precisa."))));
     disegni.push(() => graficoForma(g, { giorni: forma.filter((p) => p.data >= primo), titoloTip: (p) => fmtGiorno(p.data) }));
   }
 
@@ -178,11 +185,12 @@ registraVista("analisi", { vivo: true, render(main) {
   const notti = stato.notti.filter((n) => n.data >= primo);
   const sonnoOn = modulo("sonno"), riposoOn = modulo("riposo");
   if (sonnoOn || riposoOn) {
-    const r = sonnoOn ? recupero(stato.notti, d, stato.profilo.recupero) : null;
-    // Un grafico per misura (nel sonno, a riposo): la soglia sta su quella che usa il controllo di oggi. Col modulo
-    // Battito a riposo il suo grafico c'è sempre, anche senza il modulo Sonno (allora senza soglia).
-    const conDati = Object.keys(MISURE_RECUPERO).filter((k) => (sonnoOn && notti.some((n) => n[k] != null)) || (riposoOn && k === "fc_riposo"));
-    for (const k of conDati.length ? conDati : ["fc_sonno"]) {
+    // Un grafico per misura, ognuna col suo modulo: la soglia sta su quella che usa il controllo di oggi. Il battito
+    // nel sonno, se c'è anche quello a riposo, solo quando l'orologio lo ha mai dato.
+    const attive = misureAttive(stato.profilo.moduli);
+    const r = recupero(stato.notti, d, stato.profilo.recupero, attive);
+    const grafici = attive.filter((k) => k !== "fc_sonno" || !riposoOn || stato.notti.some((n) => n.fc_sonno != null));
+    for (const k of grafici) {
       const M = MISURE_RECUPERO[k], mia = r?.misura === k;
       const [c, g] = card(M.titolo, mia && r.soglia ? `Linea tratteggiata: la tua soglia di oggi, ${r.soglia} bpm (media ${fmtNum(r.media, 1)} + ${stato.profilo.recupero.scarto_bpm}).`
         : mia ? `La soglia compare dopo 5 ${M.giorni}.` : r ? `Oggi il controllo del recupero usa il ${MISURE_RECUPERO[r.misura].nome}.` : "Per giorno, in bpm.");

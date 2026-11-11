@@ -507,9 +507,8 @@ function moduloNotte(main, param) {
       el("p", { class: "sotto" }, "Copia i valori dall'app del tuo orologio o anello. Se la data c'è già, la aggiorni."),
       campo(soloRiposo ? "Giorno" : "Mattina del", data),
       sonno ? el("div", { class: "righe" }, campo("Ore di sonno", c.ore), campo("Minuti", c.min)) : null,
-      sonno ? el("div", { class: "righe" }, campo("Battito nel sonno", c.fc_sonno, "bpm, media"), campo("Battito a riposo", c.fc_riposo, "bpm")) : null,
-      riposo && !sonno ? el("div", { class: "righe" }, campo("Battito a riposo", c.fc_riposo, "bpm")) : null,
-      sonno ? el("p", { class: "sotto" }, "Per il controllo del recupero basta uno dei due battiti: si usa quello nel sonno se c'è, altrimenti quello a riposo, sempre confrontato con la media della stessa misura.") : null,
+      sonno || riposo ? el("div", { class: "righe" }, sonno ? campo("Battito nel sonno", c.fc_sonno, "bpm, media") : null, riposo ? campo("Battito a riposo", c.fc_riposo, "bpm") : null) : null,
+      sonno && riposo ? el("p", { class: "sotto" }, "Per il controllo del recupero basta uno dei due battiti: si usa quello nel sonno se c'è, altrimenti quello a riposo, sempre confrontato con la media della stessa misura.") : null,
       ossigeno ? el("div", { class: "righe" }, campo("SpO₂ minima", c.spo2_min, "%"), campo("SpO₂ media", c.spo2_media, "%"), campo("SpO₂ massima", c.spo2_max, "%")) : null,
       campo("Nota", nota),
       el("div", { class: "azioni" }, salva, togli, esitoN)));

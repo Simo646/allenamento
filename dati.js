@@ -153,12 +153,16 @@ export function precompilaEsercizio(esScheda, sessioni, data) {
 // Due giorni di fila sopra la soglia → riduci il carico. Servono almeno 5 valori per avere una media.
 // Due misure, mai mischiate: il battito nel sonno e, quando manca, il battito a riposo (per esempio da Health
 // Connect, se l'orologio non esporta il battito della notte). Ogni valore si confronta con la media della sua misura.
+// Ogni misura ha il suo modulo: fc_sonno col modulo Sonno, fc_riposo col modulo Battito a riposo.
 export const MISURE_RECUPERO = {
-  fc_sonno: { nome: "battito nel sonno", titolo: "Battito nel sonno", giorni: "notti", stanotte: "stanotte", due: "Due notti col battito alto" },
-  fc_riposo: { nome: "battito a riposo", titolo: "Battito a riposo", giorni: "giorni", stanotte: "oggi", due: "Due giorni col battito a riposo alto" },
+  fc_sonno: { nome: "battito nel sonno", titolo: "Battito nel sonno", giorni: "notti", stanotte: "stanotte", due: "Due notti col battito alto", modulo: "sonno" },
+  fc_riposo: { nome: "battito a riposo", titolo: "Battito a riposo", giorni: "giorni", stanotte: "oggi", due: "Due giorni col battito a riposo alto", modulo: "riposo" },
 };
-export function recupero(notti, data, { scarto_bpm = 3, notti: quante = 14 } = {}) {
-  const misure = Object.keys(MISURE_RECUPERO).map((k) => {
+// Le misure dei moduli accesi; nessuna → niente controllo del recupero.
+export const misureAttive = (moduli = {}) => Object.keys(MISURE_RECUPERO).filter((k) => moduli[MISURE_RECUPERO[k].modulo]);
+export function recupero(notti, data, { scarto_bpm = 3, notti: quante = 14 } = {}, chiavi = Object.keys(MISURE_RECUPERO)) {
+  if (!chiavi.length) return null;
+  const misure = chiavi.map((k) => {
     const ord = notti.filter((n) => n[k] != null).sort((a, b) => b.data.localeCompare(a.data));
     return { k, ord, stanotte: ord.find((n) => n.data === data), prima: ord.filter((n) => n.data < data).slice(0, quante) };
   });
@@ -176,7 +180,7 @@ export function recupero(notti, data, { scarto_bpm = 3, notti: quante = 14 } = {
   // Notte registrata ma senza battito (per esempio importata con la sola durata): manca solo il battito.
   if (!stanotte) return notti.some((n) => n.data === data)
     ? { ...base, stato: "senzaFc", testo: `Manca il ${M.nome} di ${M.stanotte}: serve per il controllo del recupero.`, media, soglia }
-    : { ...base, stato: "manca", testo: "Manca la notte di oggi.", media, soglia };
+    : { ...base, stato: "manca", testo: chiavi.includes("fc_sonno") ? "Manca la notte di oggi." : "Manca il battito a riposo di oggi.", media, soglia };
   const ieri = ord.find((n) => n.data === giornoPrima(data));
   const alta = (n) => n && n[k] >= soglia;
   if (alta(stanotte) && alta(ieri)) return { ...base, stato: "riduci", testo: `${M.due}: riduci il carico oggi e domani.`, media, soglia };

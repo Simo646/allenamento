@@ -1,6 +1,6 @@
 // Avvio dell'app, vista Oggi ed elenco degli allenamenti. Le altre viste stanno nei loro moduli e si registrano da sole.
 import { stato, avvia, pronto, registraVista, vai, programmaRender, testata, coloreTipo, nomeTipo, iconaTipo, chipZona, modulo, descriviVoce, intervalloZona } from "./stato.js";
-import { GIORNI, vociDelGiorno, statoVoci, recupero, MISURE_RECUPERO } from "./dati.js";
+import { GIORNI, vociDelGiorno, statoVoci, recupero, MISURE_RECUPERO, misureAttive } from "./dati.js";
 import { TIPI } from "./analisi-file.js";
 import { $, el, metti, icona, ICONE, oggi, piuGiorni, lunediDi, fmtData, fmtNum, fmtDur, fmtOre, somma, ricorda, applicaTema, conConferma, avviso, esito } from "./util.js";
 import { voceSessione, perData, metriche, apriDettaglio, chiudiDettaglio } from "./dettaglio.js";
@@ -203,25 +203,26 @@ function cardRecupero(d) {
       el("b", {}, u ? fmtNum(u.fc_riposo) : "—", el("em", {}, "bpm")),
       el("span", {}, [m == null ? "" : `media ${fmtNum(m)}`, altroGiorno ? fmtData(u.data, { day: "numeric", month: "short" }) : ""].filter(Boolean).join(" · ")));
   };
-  const r = sonno ? recupero(stato.notti, d, stato.profilo.recupero) : null;
-  const PILL = { ok: ["ok", "Via libera"], attenzione: ["attenzione", "Battito alto"], riduci: ["riduci", "Riduci il carico"], manca: ["neutro", "Manca la notte"], senzaFc: ["neutro", "Manca il battito"], dati: ["neutro", "Media in costruzione"] };
+  // Ogni modulo porta i suoi riquadri; il controllo del recupero usa solo le misure dei moduli accesi.
+  const r = recupero(stato.notti, d, stato.profilo.recupero, misureAttive(stato.profilo.moduli));
+  const inserisci = sonno || ossigeno ? "Inserisci la notte" : "Inserisci il battito";
+  const PILL = { ok: ["ok", "Via libera"], attenzione: ["attenzione", "Battito alto"], riduci: ["riduci", "Riduci il carico"], manca: ["neutro", sonno ? "Manca la notte" : "Manca il battito"], senzaFc: ["neutro", "Manca il battito"], dati: ["neutro", "Media in costruzione"] };
   const tiles = [
-    sonno ? tile(MISURE_RECUPERO[r.misura].titolo, r.misura, "bpm") : null,
+    // Battito nel sonno: se c'è anche il battito a riposo, solo quando l'orologio lo ha mai dato (sennò sarebbe sempre "—").
+    sonno && (!riposo || notti.some((n) => n.fc_sonno != null)) ? tile("Battito nel sonno", "fc_sonno", "bpm") : null,
     sonno ? tile("Sonno", "durata_min", "h", fmtOre) : null,
+    riposo ? tileRiposo() : null,
     ossigeno ? tile("SpO₂ minima", "spo2_min", "%") : null,
     ossigeno && !sonno && !riposo ? tile("SpO₂ media", "spo2_media", "%") : null,
-    // Col modulo Sonno il battito a riposo può già essere la misura del recupero: niente doppione.
-    riposo && !(sonno && r.misura === "fc_riposo") ? tileRiposo() : null,
   ].filter(Boolean);
-  const titolo = sonno ? "Recupero" : ossigeno && riposo ? "Ossigeno e battito" : ossigeno ? "Ossigeno nel sonno" : "Battito a riposo";
   return el("section", { class: "card" },
-    el("div", { class: "card-testa" }, el("h2", {}, titolo),
+    el("div", { class: "card-testa" }, el("h2", {}, r ? "Recupero" : "Ossigeno nel sonno"),
       r ? el("span", { class: "pill " + PILL[r.stato][0] }, PILL[r.stato][1])
-        : el("button", { type: "button", class: "lnk", onclick: () => vai("registra", { tipo: "notte", data: d }) }, sonno || ossigeno ? "Inserisci la notte" : "Inserisci")),
+        : el("button", { type: "button", class: "lnk", onclick: () => vai("registra", { tipo: "notte", data: d }) }, inserisci)),
     ultima && (sonno || ossigeno) ? el("p", { class: "sotto" }, ultima === stanotte ? "Stanotte" : "Ultima notte inserita: " + fmtData(ultima.data, { weekday: "short", day: "numeric", month: "short" })) : null,
     el("div", { class: "tiles" + (tiles.length === 1 ? " uno" : tiles.length === 2 || tiles.length === 4 ? " due" : "") }, tiles),
-    r ? el("p", { class: "sotto" }, r.testo + (r.soglia ? ` La tua media è ${fmtNum(r.media, 1)} bpm, soglia ${r.soglia}.` : "")) : null,
-    r?.stato === "manca" || r?.stato === "senzaFc" ? el("button", { type: "button", class: "btn piccolo", style: "justify-self:start", onclick: () => vai("registra", { tipo: "notte", data: d }) }, "Inserisci la notte") : null);
+    r ? el("p", { class: "sotto" }, r.testo + (r.soglia ? ` La tua media del ${MISURE_RECUPERO[r.misura].nome} è ${fmtNum(r.media, 1)} bpm, soglia ${r.soglia}.` : "")) : null,
+    r?.stato === "manca" || r?.stato === "senzaFc" ? el("button", { type: "button", class: "btn piccolo", style: "justify-self:start", onclick: () => vai("registra", { tipo: "notte", data: d }) }, inserisci) : null);
 }
 
 function cardSettimana(d) {
