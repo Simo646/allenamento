@@ -241,22 +241,36 @@ main{display:grid;gap:14px;align-content:start;padding-bottom:14px}
 .comandi-vivo{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
 .comandi-vivo.tre{grid-template-columns:repeat(3,minmax(0,1fr))}
 .azioni-rapide .largo{grid-column:1 / -1}
-.tiles.quattro{grid-template-columns:repeat(4,minmax(0,1fr))}
-.tiles.quattro .tile{padding:8px 8px}
-.tiles.quattro .tile b{font-size:18px}
 
 /* Timer HIIT: fase in alto nel suo colore, conto alla rovescia enorme, esercizio in corso (o in arrivo) e il successivo */
-.hiit{display:grid;gap:6px;justify-items:center;text-align:center;background:var(--surface);border:var(--tratto);border-radius:var(--r);overflow:hidden;padding-bottom:16px}
+.hiit-schermo{display:flex;flex-direction:column;gap:8px;
+  min-height:calc(100vh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px) - 94px);
+  min-height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px) - 94px)}
+.hiit-schermo .testata-vivo{min-height:36px}
+.hiit{display:grid;gap:4px;justify-items:center;text-align:center;background:var(--surface);border:var(--tratto);border-radius:var(--r);overflow:hidden;padding-bottom:10px}
 .hiit-fase{justify-self:stretch;padding:8px;font-family:var(--font-ui);font-weight:600;font-size:20px;letter-spacing:.08em;text-transform:uppercase;background:var(--ink);color:var(--bg)}
 .hiit[data-fase=lavoro] .hiit-fase{background:var(--z5);color:var(--z5-ink)}
 .hiit[data-fase=pausa] .hiit-fase{background:var(--z2);color:var(--z2-ink)}
 .hiit[data-fase=recupero] .hiit-fase{background:var(--z3);color:var(--z3-ink)}
 .hiit[data-fase=ferma] .hiit-fase{background:var(--faint);color:var(--bg)}
-.hiit-conto{font-family:var(--font-ui);font-size:clamp(84px,30vw,160px);font-weight:600;line-height:1;letter-spacing:-.04em;font-variant-numeric:tabular-nums}
-.hiit-esercizio{display:grid;gap:2px;padding:0 14px}
+.hiit-conto{font-family:var(--font-ui);font-size:clamp(64px,min(30vw,14vh),160px);font-weight:600;line-height:1;letter-spacing:-.04em;font-variant-numeric:tabular-nums}
+.hiit-esercizio{display:grid;gap:2px;justify-self:stretch}
+/* Rullo degli esercizi: scorrono verso l'alto; data-rel = distanza da quello in corso (o in arrivo). */
+.hiit-rullo{position:relative;height:106px;overflow:hidden}
+.hiit-riga{position:absolute;inset:0 0 auto;padding:0 14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2;
+  font-family:var(--font-testo);transition:transform .45s ease,font-size .45s ease,opacity .45s ease,color .45s ease}
+.hiit-riga[data-rel="0"]{font-size:clamp(24px,8.5vw,40px);font-weight:700}
+.hiit-riga[data-rel="1"]{transform:translateY(46px);font-size:clamp(20px,6.5vw,30px);font-weight:600}
+.hiit-riga[data-rel="1"]::before{content:"Poi ";font-family:var(--font-ui);font-size:13px;font-weight:500;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.hiit-riga[data-rel="2"]{transform:translateY(80px);font-size:17px;font-weight:500;color:var(--muted)}
+.hiit-riga[data-rel="sopra"]{transform:translateY(-44px);font-size:clamp(24px,8.5vw,40px);font-weight:700;opacity:0}
+.hiit-riga[data-rel="sotto"]{transform:translateY(110px);font-size:17px;opacity:0}
+.hiit-dati{flex:1 0 auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:minmax(64px,1fr);gap:8px}
+.hiit-dati .tile{justify-content:center;padding:8px 12px}
+.hiit-dati .tile small{font-size:13px}
+.hiit-dati .tile b{font-size:clamp(30px,11vw,56px);line-height:1.05;letter-spacing:-.02em}
+.hiit-dati .tile b em{font-size:18px}
 .hiit-esercizio small{font-family:var(--font-ui);font-weight:500;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
-.hiit-nome{font-family:var(--font-testo);font-size:clamp(26px,8.5vw,40px);font-weight:700;line-height:1.1}
-.hiit-poi{margin:0;padding:0 14px;font-size:17px;font-weight:500;color:var(--muted)}
 
 /* Vista di lettura di una scheda, come un foglio da palestra */
 .azioni-scheda{display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px}

@@ -252,11 +252,11 @@ function schermataPreparazione(main, param) {
     el("section", { class: "card modulo" },
       el("fieldset", { class: "campo" }, el("legend", {}, "Attività"), tipi),
       sotto, selScheda, autoPausa),
-    hiit ? boxTimer(scelta.hiit, sc) : schedaBox(sc),
-    cardio ? boxAvvisoZona(scelta) : null,
     el("section", { class: "card modulo" }, el("h2", {}, cardio ? "GPS e fascia cardio" : "Fascia cardio"),
       statoGps, impostazioniGps, statoQuota, boxFascia,
       el("p", { class: "sotto" }, cardio ? "La fascia è facoltativa: senza, niente battito e zone." : "Facoltativa: senza, registro lo stesso tempo ed esercizi.")),
+    cardio ? boxAvvisoZona(scelta) : null,
+    hiit ? boxTimer(scelta.hiit, sc) : schedaBox(sc),
     avvisoSchermo,
     el("div", { class: "azioni" }, avvia),
     !forza ? el("button", { type: "button", class: "lnk", style: "justify-self:start", onclick: () => { chiudiSorgenti(); s = null; vai("registra", { tipo: "file", data: oggi(), voce: { tipo: scelta.tipo, sottotipo: scelta.sottotipo, scheda: scelta.scheda } }); } }, "Hai già il file dell'allenamento? Importalo") : null);
@@ -455,8 +455,23 @@ function schermataHiit(main) {
   const fase = el("div", { class: "hiit-fase" });
   const conto = el("b", { class: "hiit-conto num" });
   const etichetta = el("small", {});
-  const nome = el("b", { class: "hiit-nome" });
-  const poi = el("p", { class: "hiit-poi" });
+  const lavori = h.fasi.filter((f) => f.tipo === "lavoro");
+  const rullo = el("div", { class: "hiit-rullo" });
+  const righe = new Map();
+  // Gli esercizi scorrono verso l'alto: in corso (o in arrivo) grande, il successivo ben leggibile sotto, poi quello
+  // dopo più tenue. Si tengono solo le righe vicine; l'ultima posizione è "Fine".
+  const scorri = (i) => {
+    for (const [k, nodo] of righe) if (k < i - 1 || k > i + 3) { nodo.remove(); righe.delete(k); }
+    for (let k = Math.max(0, i - 1); k <= Math.min(lavori.length, i + 3); k++) {
+      if (!righe.has(k)) {
+        const nodo = el("div", { class: "hiit-riga", "data-rel": "sotto" }, k < lavori.length ? lavori[k].esercizio : "Fine");
+        righe.set(k, nodo);
+        rullo.append(nodo);
+        nodo.getBoundingClientRect(); // parte da "sotto", così entra scorrendo
+      }
+      righe.get(k).dataset.rel = k < i ? "sopra" : k - i < 3 ? String(k - i) : "sotto";
+    }
+  };
   const giro = el("b", { class: "num" }), esercizio = el("b", { class: "num" }), resta = el("b", { class: "num" }), battito = el("b", { class: "num" });
   const stato1 = el("p", { class: "stato-sorgente" });
   const audio = el("button", { type: "button", class: "lnk" });
@@ -471,7 +486,7 @@ function schermataHiit(main) {
   const collega = bottoneCollega(() => aggiorna());
   const tile = (k, v) => el("div", { class: "tile" }, el("small", {}, k), v);
   const tileBattito = tile("Battito", battito);
-  const box = el("section", { class: "hiit" }, fase, conto, el("div", { class: "hiit-esercizio" }, etichetta, nome), poi);
+  const box = el("section", { class: "hiit" }, fase, conto, el("div", { class: "hiit-esercizio" }, etichetta, rullo));
   function aggiorna() {
     const t = Date.now();
     const st = statoTimer(h.fasi, posizioneHiit(t));
@@ -481,8 +496,7 @@ function schermataHiit(main) {
     fase.textContent = r.pausaManuale ? "In pausa" : NOME_FASE[f.tipo];
     conto.textContent = fmtSec(Math.ceil(st.resta - 0.05));
     etichetta.textContent = lavoro ? "Adesso" : "Prossimo";
-    nome.textContent = st.ora?.esercizio ?? "";
-    poi.textContent = st.poi ? `Poi: ${st.poi.esercizio}` : lavoro ? "Ultimo esercizio" : "Poi: fine";
+    scorri(lavori.indexOf(st.ora));
     giro.textContent = `${f.giro}/${h.imp.giri}`;
     esercizio.textContent = `${f.n}/${h.esercizi.length}`;
     resta.textContent = fmtSec(st.restaTotale);
@@ -497,13 +511,14 @@ function schermataHiit(main) {
     forseSalva();
   }
 
-  metti(main,
+  // Tutto in una schermata: i quattro riquadri prendono lo spazio che resta sopra i comandi.
+  metti(main, el("div", { class: "hiit-schermo" },
     led,
     el("header", { class: "testata-vivo" }, el("span", {}, (s.scelta?.scheda && stato.schede[s.scelta.scheda]?.titolo) || "HIIT"), el("span", { class: "num" }, oraInizio(r))),
     box,
-    el("div", { class: "tiles quattro" }, tile("Giro", giro), tile("Esercizio", esercizio), tile("Manca", resta), tileBattito),
+    el("div", { class: "hiit-dati" }, tile("Giro", giro), tile("Esercizio", esercizio), tile("Manca", resta), tileBattito),
     el("div", { style: "display:flex;justify-content:space-between;align-items:center;gap:12px" }, stato1, audio),
-    collega);
+    collega));
   mostraComandi([pausa, salta, fine]);
   programmaBipHiit();
   aggiorna();

@@ -32,18 +32,47 @@ function bip(frequenza, durata, quando) {
   return g;
 }
 
+const spegni = (nodi) => { for (const g of nodi) try { g.disconnect(); } catch { /* già finito */ } };
+
+// Se l'audio si ferma per un momento (una notifica di un'altra app prende l'altoparlante), il suo tempo resta indietro
+// rispetto all'orologio e i bip già programmati arriverebbero in ritardo: ogni secondo si confrontano i due tempi e,
+// se divergono, si riprogramma quello che manca sull'orologio.
+const attivi = new Set(); // { segnali: [{ t (performance.now), tono }], nodi, c0, p0 }
+let sorveglia = 0;
+
+function suona(p) {
+  spegni(p.nodi);
+  p.nodi = [];
+  p.p0 = performance.now();
+  p.c0 = ctx.currentTime;
+  const t0 = p.c0 + 0.05;
+  for (const { t, tono } of p.segnali) {
+    const tra_s = (t - p.p0) / 1000;
+    const [conto, scatto, durata] = TONI[tono] ?? TONI.via;
+    for (const k of [3, 2, 1]) if (tra_s - k > 0) p.nodi.push(bip(conto, 0.12, t0 + tra_s - k));
+    if (tra_s > 0) p.nodi.push(bip(scatto, durata, t0 + tra_s));
+  }
+}
+
+function controlla() {
+  const ora = performance.now();
+  for (const p of attivi) if (!p.segnali.some((x) => x.t > ora)) attivi.delete(p);
+  if (!attivi.size || !ctx) { clearInterval(sorveglia); sorveglia = 0; return; }
+  if (ctx.state !== "running") { ctx.resume().catch(() => {}); return; }
+  for (const p of attivi) if (Math.abs(ctx.currentTime - p.c0 - (ora - p.p0) / 1000) > 0.2) suona(p);
+}
+
 // Programma i conti alla rovescia: [{tra_s, tono}], con tra_s i secondi da adesso allo scatto. Restituisce la funzione
 // che li annulla tutti (pausa, salto, audio spento).
 export function programmaSegnali(segnali) {
   if (!suoniAttivi() || !sbloccaAudio()) return () => {};
-  const t0 = ctx.currentTime + 0.05;
-  const nodi = [];
-  for (const { tra_s, tono } of segnali) {
-    const [conto, scatto, durata] = TONI[tono] ?? TONI.via;
-    for (const k of [3, 2, 1]) if (tra_s - k > 0) nodi.push(bip(conto, 0.12, t0 + tra_s - k));
-    if (tra_s > 0) nodi.push(bip(scatto, durata, t0 + tra_s));
-  }
-  return () => { for (const g of nodi) try { g.disconnect(); } catch { /* già finito */ } };
+  const ora = performance.now();
+  const p = { segnali: segnali.map(({ tra_s, tono }) => ({ t: ora + tra_s * 1000, tono })), nodi: [] };
+  suona(p);
+  attivi.add(p);
+  ctx.onstatechange = controlla;
+  sorveglia ||= setInterval(controlla, 1000);
+  return () => { spegni(p.nodi); attivi.delete(p); };
 }
 
 // Avviso di zona: due bip acuti se il battito è sopra la zona (rallenta), due gravi se è sotto (aumenta).
