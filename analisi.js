@@ -7,6 +7,7 @@ import { COLORE_ZONA, graficoColonne, graficoLinea, graficoIntervalli, graficoFo
 import { andamentoForma, giudizioForma, caricoSessione } from "./carico.js";
 import { zoneDi, haZone, conPasso, volumeSessione, apriDettaglio } from "./dettaglio.js";
 import { recordPersonali } from "./record.js";
+import { T } from "./lingua.js";
 
 const scelte = { settimane: 8, andamento: null, esercizio: null, record: null };
 
@@ -26,7 +27,7 @@ registraVista("analisi", { vivo: true, render(main) {
   const sess = stato.sessioni.filter((s) => s.data >= primo && s.data <= d);
   const perSett = (w) => sess.filter((s) => lunediDi(s.data) === w);
   const etichetta = (w) => fmtData(w, { day: "numeric", month: "short" });
-  const titoloSett = (w) => `Settimana del ${fmtData(w, { day: "numeric", month: "long" })}`;
+  const titoloSett = (w) => T("Settimana del {0}", fmtData(w, { day: "numeric", month: "long" }));
   const fmtMin = { asse: (v) => (v >= 60 ? `${fmtNum(v / 60, v % 60 ? 1 : 0)} h` : v ? `${v}'` : "0"), tip: fmtDur, minuti: true };
   const tipi = [...TIPI, ...new Set(sess.map((s) => s.tipo))].filter((t, i, a) => a.indexOf(t) === i && sess.some((s) => s.tipo === t));
 
@@ -39,7 +40,7 @@ registraVista("analisi", { vivo: true, render(main) {
   const FORMATO = { distanza: (v) => `${fmtNum(v, 1)} km`, durata: fmtDur, salita: (v) => `${fmtNum(v)} m`, velocita: (v) => `${fmtNum(v, 1)} km/h`, passo: (v) => `${fmtSec(v)} /km` };
   const gruppiRec = [
     ...rec.cardio.map((g) => ({ chiave: g.tipo + "|" + (g.sottotipo ?? ""), nome: nomeTipo(g.tipo, g.sottotipo), righe: g.voci.map((v) => [v.breve, FORMATO[v.voce](v.valore), v]) })),
-    ...(rec.forza.length ? [{ chiave: "Forza", nome: "Forza: massimale stimato", righe: rec.forza.map((f) => [f.esercizio + (f.serie ? ` · ${fmtKg(f.serie.kg)} kg × ${f.serie.rip}` : ""), `${fmtKg(f.valore)} kg`, f]) }] : []),
+    ...(rec.forza.length ? [{ chiave: "Forza", nome: "Forza: massimale stimato", righe: rec.forza.map((f) => [T(f.esercizio) + (f.serie ? ` · ${fmtKg(f.serie.kg)} kg × ${f.serie.rip}` : ""), `${fmtKg(f.valore)} kg`, f]) }] : []),
   ];
   if (gruppiRec.length) {
     if (!gruppiRec.some((g) => g.chiave === scelte.record)) scelte.record = gruppiRec[0].chiave;
@@ -67,11 +68,12 @@ registraVista("analisi", { vivo: true, render(main) {
         tile("Forma di fondo", fmtNum(u.forma), "var(--forma)", "6 settimane"), tile("Fatica", fmtNum(u.fatica), "var(--fatica)", "7 giorni"), tile("Bilancio", segno(u.bilancio), null, "forma − fatica")),
       el("p", { class: "giudizio-forma " + giudizio.livello }, el("b", {}, giudizio.stato), giudizio.testo),
       g,
-      el("p", { class: "sotto" }, "Blu: quanto ti alleni di solito. Arancione: quanto ti sei allenato nell'ultima settimana. Arancione sopra il blu = più del solito."
-        + (stimati ? ` ${stimati === 1 ? "Un allenamento del periodo ha" : `${stimati} allenamenti del periodo hanno`} il carico stimato: segna la fatica percepita per renderlo più preciso.` : "")),
+      el("p", { class: "sotto" }, T("Blu: quanto ti alleni di solito. Arancione: quanto ti sei allenato nell'ultima settimana. Arancione sopra il blu = più del solito.")
+        + (stimati ? " " + (stimati === 1 ? T("Un allenamento del periodo ha il carico stimato: segna la fatica percepita per renderlo più preciso.")
+          : T("{0} allenamenti del periodo hanno il carico stimato: segna la fatica percepita per renderlo più preciso.", stimati)) : "")),
       el("details", { class: "spiega" }, el("summary", {}, "Come si legge"),
         el("p", { class: "sotto" }, "Punti di carico: 1 punto ≈ 1 minuto in Z2. Le zone alte pesano di più: un minuto in Z1 vale ½ punto, in Z3 1½, in Z4 2, in Z5 2½. Per la forza, e quando manca la fascia, conta la fatica percepita (3 vale come Z2, 7 come Z4); se manca anche quella, una stima per tipo di allenamento."),
-        el("p", { class: "sotto" }, `Forma di fondo (blu): i punti medi al giorno delle ultime 6 settimane circa, cioè quanto sei abituato ad allenarti. Sale e scende piano. Ora è ${fmtNum(u.forma)}: come fare ${fmtNum(u.forma)} minuti in Z2 ogni giorno, circa ${fmtNum(ore, ore < 10 ? 1 : 0)} ore a settimana.`),
+        el("p", { class: "sotto" }, T("Forma di fondo (blu): i punti medi al giorno delle ultime 6 settimane circa, cioè quanto sei abituato ad allenarti. Sale e scende piano. Ora è {0}: come fare {0} minuti in Z2 ogni giorno, circa {1} ore a settimana.", fmtNum(u.forma), fmtNum(ore, ore < 10 ? 1 : 0))),
         el("p", { class: "sotto" }, "Fatica (arancione): la stessa media, ma sull'ultima settimana. Sale subito dopo allenamenti duri e cala in pochi giorni di riposo."),
         el("p", { class: "sotto" }, "Bilancio = forma − fatica. Negativo (arancione sopra il blu): ti alleni più del solito e accumuli fatica; è normale nei periodi in cui costruisci. Positivo (arancione sotto): ti alleni meno del solito e recuperi. Il giudizio confronta il bilancio con la forma: da −20% a +10% sei in equilibrio, oltre −50% molto affaticato."),
         el("p", { class: "sotto" }, "I giorni senza allenamento valgono zero punti. È una tendenza per capire la direzione, non una misura precisa."))));
@@ -92,7 +94,8 @@ registraVista("analisi", { vivo: true, render(main) {
   const z2 = somma(conZone, (s) => s.z2_min), totZ = somma(conZone, (s) => zoneDi(s).reduce((b, z) => b + (z ?? 0), 0));
   const senza = sess.length - conZone.length;
   const [cZone, gZone] = card("Tempo in zona a settimana",
-    sess.length ? (totZ ? `Z2 nel periodo: ${fmtDur(z2)}, il ${fmtNum((z2 / totZ) * 100)}% del tempo misurato. ` : "") + (senza ? `Righe oblique: ${senza} allenament${senza === 1 ? "o" : "i"} senza battito.` : "") : "");
+    sess.length ? [totZ ? T("Z2 nel periodo: {0}, il {1}% del tempo misurato.", fmtDur(z2), fmtNum((z2 / totZ) * 100)) : "",
+      senza ? T(senza === 1 ? "Righe oblique: {0} allenamento senza battito." : "Righe oblique: {0} allenamenti senza battito.", senza) : ""].filter(Boolean).join(" ") : "");
   sezioni.push(cZone);
   const lim = limiti();
   disegni.push(() => sess.length ? graficoColonne(gZone, {
@@ -106,7 +109,7 @@ registraVista("analisi", { vivo: true, render(main) {
     el("div", { class: "tabella" }, el("table", {},
       el("thead", {}, el("tr", {}, el("th", {}, "Zona"), el("th", {}, "bpm"), el("th", {}, "Allena"))),
       el("tbody", {}, A_COSA_SERVONO.map(([nome, testo], i) => el("tr", {},
-        el("td", {}, el("span", { style: "display:inline-flex;align-items:center;gap:6px;white-space:nowrap" }, el("i", { class: "dot", style: `background:${COLORE_ZONA[i]}` }), `${ZONE[i]} ${nome}`)),
+        el("td", {}, el("span", { style: "display:inline-flex;align-items:center;gap:6px;white-space:nowrap" }, el("i", { class: "dot", style: `background:${COLORE_ZONA[i]}` }), `${ZONE[i]} ${T(nome)}`)),
         el("td", { class: "num", style: "white-space:nowrap" }, intervalloZona(i, lim)),
         el("td", { style: "white-space:normal;min-width:140px" }, testo))))))));
 
@@ -135,7 +138,7 @@ registraVista("analisi", { vivo: true, render(main) {
     const lista = sess.filter((s) => s.tipo === t && (!st || s.sottotipo === st) && s.km > 0 && s.durata_min);
     const passo = conPasso(t);
     const sel = el("select", { class: "input", "aria-label": "Attività", onchange: (e) => { scelte.andamento = e.target.value; ridisegnaAnalisi(); } },
-      opzioni.map((o) => { const [a, b] = o.split("|"); return el("option", { value: o, selected: o === scelte.andamento }, b ? `Bici ${b === "MTB" ? "MTB" : b.toLowerCase()}` : a); }));
+      opzioni.map((o) => { const [a, b] = o.split("|"); return el("option", { value: o, selected: o === scelte.andamento }, b ? nomeTipo("Bici", b) : a); }));
     const [c, g] = card(passo ? "Passo medio" : "Velocità media", passo ? "Minuti al chilometro per allenamento: più in basso è più veloce." : "Chilometri all'ora per uscita.", sel);
     sezioni.push(c);
     disegni.push(() => graficoLinea(g, {
@@ -190,8 +193,8 @@ registraVista("analisi", { vivo: true, render(main) {
     const r = recupero(stato.notti, d, stato.profilo.recupero, attive);
     for (const k of attive) {
       const M = MISURE_RECUPERO[k], mia = r?.misura === k;
-      const [c, g] = card(M.titolo, mia && r.soglia ? `Linea tratteggiata: la tua soglia di oggi, ${r.soglia} bpm (media ${fmtNum(r.media, 1)} + ${stato.profilo.recupero.scarto_bpm}).`
-        : mia ? `La soglia compare dopo 5 ${M.giorni}.` : r ? `Oggi il controllo del recupero usa il ${MISURE_RECUPERO[r.misura].nome}.` : "Per giorno, in bpm.");
+      const [c, g] = card(M.titolo, mia && r.soglia ? T("Linea tratteggiata: la tua soglia di oggi, {0} bpm (media {1} + {2}).", r.soglia, fmtNum(r.media, 1), stato.profilo.recupero.scarto_bpm)
+        : mia ? T("La soglia compare dopo 5 {0}.", T(M.giorni)) : r ? T("Oggi il controllo del recupero usa il {0}.", T(MISURE_RECUPERO[r.misura].nome)) : "Per giorno, in bpm.");
       sezioni.push(c);
       disegni.push(() => graficoLinea(g, {
         punti: notti.filter((n) => n[k] != null).map((n) => ({ data: n.data, v: n[k], extra: k === "fc_sonno" && sonnoOn && n.durata_min != null ? [[null, "Sonno", fmtDur(n.durata_min)]] : [] })),

@@ -6,7 +6,9 @@
 //   né fatica, una stima per tipo (marcata "stima").
 // - Forma di fondo: media esponenziale del carico di ogni giorno su 42 giorni; fatica: su 7 giorni; bilancio: forma
 //   meno fatica. Il giudizio guarda il bilancio rispetto alla forma, quindi non dipende dalla scala dei punti.
-export const FATICA = [[1, "molto facile"], [2, "facile"], [3, "moderata"], [4, "abbastanza dura"], [5, "dura"], [6, ""], [7, "molto dura"], [8, ""], [9, ""], [10, "massima"]];
+import { T } from "./lingua.js";
+
+export const FATICA = [[1, "molto facile"], [2, "facile"], [3, "moderata"], [4, "abbastanza dura"], [5, "dura"], [6, ""], [7, "molto dura"], [8, ""], [9, ""], [10, "massima"]].map(([n, s]) => [n, T(s)]);
 const SCALA = 0.5;
 // Peso al minuto (come una zona, 1-5) della fatica percepita: 3 "moderata" = Z2, 5 "dura" = Z3, 7 "molto dura" = Z4.
 export const pesoFatica = (f) => Math.min(5, (f + 1) / 2);
@@ -67,12 +69,13 @@ export function andamentoForma(sessioni = [], al) {
 // Giudizio sul bilancio di un giorno, rispetto alla forma di fondo. Le soglie sono quelle di TrainingPeaks (+25, +5,
 // −10, −30 punti) riportate a una forma tipica di 60: +0,4, +0,1, −0,2, −0,5. `giorni` = quanti giorni di storia ci sono.
 export function giudizioForma(p, giorni) {
-  const poca = giorni < 42 ? " Con meno di 6 settimane di allenamenti il confronto con il solito è ancora approssimativo." : "";
-  if (!p || p.forma < 5) return { stato: "Pochi dati", testo: "Il bilancio diventa affidabile dopo qualche settimana di allenamenti." + poca, livello: "" };
+  const poca = giorni < 42 ? " " + T("Con meno di 6 settimane di allenamenti il confronto con il solito è ancora approssimativo.") : "";
+  const g = (stato, testo, livello) => ({ stato: T(stato), testo: T(testo) + poca, livello });
+  if (!p || p.forma < 5) return g("Pochi dati", "Il bilancio diventa affidabile dopo qualche settimana di allenamenti.", "");
   const r = p.bilancio / p.forma;
-  if (r > 0.4) return { stato: "Riposato", testo: "Ti sei allenato molto meno del solito: bene prima di una prova o dopo un periodo duro; se dura settimane, la forma di fondo cala." + poca, livello: "" };
-  if (r > 0.1) return { stato: "Fresco", testo: "Buon momento per un allenamento impegnativo o una prova." + poca, livello: "ok" };
-  if (r >= -0.2) return { stato: "In equilibrio", testo: "Ti stai allenando come al solito." + poca, livello: "ok" };
-  if (r >= -0.5) return { stato: "Sotto carico", testo: "Stai caricando più del solito: normale in un periodo in cui costruisci, se ci metti anche giorni di recupero." + poca, livello: "" };
-  return { stato: "Molto affaticato", testo: "Carico molto sopra il solito: valuta qualche giorno più leggero, soprattutto se dormi male o il battito notturno è alto." + poca, livello: "warn" };
+  if (r > 0.4) return g("Riposato", "Ti sei allenato molto meno del solito: bene prima di una prova o dopo un periodo duro; se dura settimane, la forma di fondo cala.", "");
+  if (r > 0.1) return g("Fresco", "Buon momento per un allenamento impegnativo o una prova.", "ok");
+  if (r >= -0.2) return g("In equilibrio", "Ti stai allenando come al solito.", "ok");
+  if (r >= -0.5) return g("Sotto carico", "Stai caricando più del solito: normale in un periodo in cui costruisci, se ci metti anche giorni di recupero.", "");
+  return g("Molto affaticato", "Carico molto sopra il solito: valuta qualche giorno più leggero, soprattutto se dormi male o il battito notturno è alto.", "warn");
 }

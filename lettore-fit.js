@@ -3,6 +3,7 @@
 // SHA-256 prima di eseguirlo: se jsDelivr servisse un file diverso da quello pubblicato da Garmin il lettore non parte,
 // così nessun codice estraneo può arrivare ai tuoi dati, al Bluetooth o alla posizione.
 // Dentro claude.ai (artifact isolato, che non può mandare dati ad altri siti) si importa direttamente il pacchetto unico.
+import { T } from "./lingua.js";
 const VERSIONE = "21.218.0";
 const BASE = `https://cdn.jsdelivr.net/npm/@garmin/fitsdk@${VERSIONE}/src/`;
 export const IMPRONTE = {
@@ -54,9 +55,9 @@ async function fileVerificato(deposito, nome, attesa) {
   } catch { /* si scarica */ }
   let risposta;
   try { risposta = await fetch(url, { cache: "force-cache" }); } catch { risposta = null; }
-  if (!risposta?.ok) throw new Error("non riesco a scaricare il lettore FIT: controlla la connessione");
+  if (!risposta?.ok) throw new Error(T("non riesco a scaricare il lettore FIT: controlla la connessione"));
   const byte = await risposta.arrayBuffer();
-  if (await improntaDi(byte) !== attesa) throw new Error("il lettore FIT scaricato non è quello originale: per sicurezza non lo uso");
+  if (await improntaDi(byte) !== attesa) throw new Error(T("il lettore FIT scaricato non è quello originale: per sicurezza non lo uso"));
   deposito?.put(url, new Response(byte, { headers: { "content-type": "text/javascript" } })).catch(() => {});
   return byte;
 }

@@ -6,6 +6,7 @@
 // mancano, e quelli completati si ricordano in `importati` per poterli correggere dopo.
 import { stato, salvaGiorni } from "./stato.js";
 import { ricorda } from "./util.js";
+import { T, LOCALE } from "./lingua.js";
 import { dataLocale } from "./analisi-file.js";
 import { salute } from "./sorgenti.js";
 
@@ -222,13 +223,15 @@ export async function importaDaSalute() {
   return { notti: conta(cambi.notti), pesi: conta(cambi.peso), tolte, lette: { notti: r?.sessioni?.length ?? 0, pesi: r?.pesi?.length ?? 0 } };
 }
 
+const partiImport = (r) => [r.notti ? (r.notti === 1 ? T("1 notte") : T("{0} notti", r.notti)) : null,
+  r.pesi ? (r.pesi === 1 ? T("1 peso") : T("{0} pesi", r.pesi)) : null].filter(Boolean).join(T(" e "));
+const tolteImport = (r) => (!r.tolte ? "" : r.tolte === 1 ? T("Tolta 1 voce importata che non risulta più.") : T("Tolte {0} voci importate che non risultano più.", r.tolte));
 export function testoImport(r) {
-  const parti = [r.notti ? `${r.notti} nott${r.notti === 1 ? "e" : "i"}` : null, r.pesi ? `${r.pesi} pes${r.pesi === 1 ? "o" : "i"}` : null].filter(Boolean);
-  const tolte = r.tolte ? (r.tolte === 1 ? " Tolta 1 voce importata che non risulta più." : ` Tolte ${r.tolte} voci importate che non risultano più.`) : "";
-  if (parti.length) return `Aggiornat${r.notti + r.pesi === 1 ? (r.notti ? "a" : "o") : "i"} ${parti.join(" e ")}.${tolte}`;
-  if (tolte) return tolte.trim();
-  return r.lette.notti || r.lette.pesi ? "Niente di nuovo: è già tutto nell'app."
-    : "Health Connect non ha sonno né peso degli ultimi 30 giorni: controlla che l'app dell'orologio o della bilancia ci scriva.";
+  const parti = partiImport(r), tolte = tolteImport(r);
+  if (parti) return [T(r.notti + r.pesi === 1 ? (r.notti ? "Aggiornata {0}." : "Aggiornato {0}.") : "Aggiornati {0}.", parti), tolte].filter(Boolean).join(" ");
+  if (tolte) return tolte;
+  return T(r.lette.notti || r.lette.pesi ? "Niente di nuovo: è già tutto nell'app."
+    : "Health Connect non ha sonno né peso degli ultimi 30 giorni: controlla che l'app dell'orologio o della bilancia ci scriva.");
 }
 
 // Nomi leggibili delle app più comuni che scrivono in Health Connect.
@@ -238,27 +241,29 @@ const NOMI_APP = {
   "com.garmin.android.apps.connectmobile": "Garmin Connect", "com.google.android.apps.wellbeing": "Benessere digitale", "com.ouraring.oura": "Oura",
   "com.withings.wiscale2": "Withings", "com.huawei.health": "Huawei Salute", "com.android.healthconnect.controller": "Health Connect",
 };
-export const nomeApp = (pkg) => NOMI_APP[pkg] ?? pkg;
+export const nomeApp = (pkg) => (NOMI_APP[pkg] ? T(NOMI_APP[pkg]) : pkg);
 
 // Riassunto dell'ultima lettura, per le Impostazioni: che cosa ha scritto ogni app negli ultimi 30 giorni.
 export function riassuntoLettura() {
   const l = ricorda.leggi("salute-letto");
   if (!l) return null;
-  const n = (q, uno, tanti) => `${q} ${q === 1 ? uno : tanti}`;
+  const n = (q, uno, tanti) => `${q} ${T(q === 1 ? uno : tanti)}`;
   const notte = (c) => (c.ore ?? []).slice(0, 6).reduce((a, x) => a + x, 0);
   const righe = Object.entries(l.conti ?? {}).map(([pkg, c]) =>
     `${nomeApp(pkg)}: ${[c.sonno ? n(c.sonno, "sessione di sonno", "sessioni di sonno") : null,
-      c.battito ? n(c.battito, "misura di battito", "misure di battito") + (c.ore ? ` (${notte(c)} tra mezzanotte e le 6)` : "") : null,
+      c.battito ? n(c.battito, "misura di battito", "misure di battito") + (c.ore ? T(" ({0} tra mezzanotte e le 6)", notte(c)) : "") : null,
       c.ossigeno ? n(c.ossigeno, "misura di ossigeno", "misure di ossigeno") : null, c.peso ? n(c.peso, "peso", "pesi") : null,
-      c.riposo ? n(c.riposo, "battito a riposo", "battiti a riposo") : null].filter(Boolean).join(", ") || "niente"}.`);
+      c.riposo ? n(c.riposo, "battito a riposo", "battiti a riposo") : null].filter(Boolean).join(", ") || T("niente")}.`);
   // Battito per ora del giorno dell'app che ne scrive di più: dice se di notte arriva.
   const [pkgFc, cFc] = Object.entries(l.conti ?? {}).filter(([, c]) => c.ore).sort((a, b) => b[1].battito - a[1].battito)[0] ?? [];
-  if (cFc) righe.push(`Battito di ${nomeApp(pkgFc)} per ora: ${cFc.ore.map((q, h) => `${h}h ${q}`).join(" · ")}.`);
-  const quando = (t) => new Date(t).toLocaleString("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-  if (l.riposo) righe.push(`Battito a riposo: media ${l.riposo.media} bpm (da ${l.riposo.min} a ${l.riposo.max}), ${n(l.riposo.n, "valore", "valori")} in ${n(l.riposo.giorni ?? l.riposo.n, "giorno", "giorni")}${l.riposo.ultimo ? `; l'ultimo del ${quando(l.riposo.ultimo)}` : ""}.`);
-  else if (l.permessoRiposo) righe.push("Battito a riposo: nessuna app lo scrive in Health Connect.");
-  if (!l.battito && !l.riposo && l.notti) righe.push("Quindi per il controllo del recupero il battito va inserito a mano: quello nel sonno o quello a riposo, dall'app dell'orologio.");
-  return { righe, nelSonno: `Nel sonno: ${n(l.battito, "misura", "misure")} di battito e ${l.ossigeno} di ossigeno; ${n(l.notti, "notte ricostruita", "notti ricostruite")} da ${n(l.sessioni, "sessione", "sessioni")}${l.conOssigeno != null ? `, ${l.conOssigeno} con l'ossigeno` : ""}.` };
+  if (cFc) righe.push(T("Battito di {0} per ora: {1}.", nomeApp(pkgFc), cFc.ore.map((q, h) => `${h}h ${q}`).join(" · ")));
+  const quando = (ms) => new Date(ms).toLocaleString(LOCALE, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  if (l.riposo) righe.push(T("Battito a riposo: media {0} bpm (da {1} a {2}), {3} in {4}{5}.", l.riposo.media, l.riposo.min, l.riposo.max, n(l.riposo.n, "valore", "valori"),
+    n(l.riposo.giorni ?? l.riposo.n, "giorno", "giorni"), l.riposo.ultimo ? T("; l'ultimo del {0}", quando(l.riposo.ultimo)) : ""));
+  else if (l.permessoRiposo) righe.push(T("Battito a riposo: nessuna app lo scrive in Health Connect."));
+  if (!l.battito && !l.riposo && l.notti) righe.push(T("Quindi per il controllo del recupero il battito va inserito a mano: quello nel sonno o quello a riposo, dall'app dell'orologio."));
+  return { righe, nelSonno: T("Nel sonno: {0} di battito e {1} di ossigeno; {2} da {3}{4}.", n(l.battito, "misura", "misure"), l.ossigeno, n(l.notti, "notte ricostruita", "notti ricostruite"),
+    n(l.sessioni, "sessione", "sessioni"), l.conOssigeno != null ? T(", {0} con l'ossigeno", l.conOssigeno) : "") };
 }
 
 // All'apertura dell'app, se l'importazione è accesa e l'ultima ha più di 3 ore (o è cambiato il calcolo). Restituisce
@@ -268,5 +273,5 @@ export async function importaSeServe() {
   const ultimo = Date.parse(ricorda.leggi("salute-ultimo") ?? "") || 0;
   if (Date.now() - ultimo < 3 * 3600e3 && ricorda.leggi("salute-versione") === VERSIONE) return null;
   const r = await importaDaSalute();
-  return r.notti || r.pesi || r.tolte ? "Da Health Connect: " + testoImport(r).replace(/^Aggiornat\w /, "").replace(/\.$/, "") : null;
+  return r.notti || r.pesi || r.tolte ? T("Da Health Connect: {0}", [partiImport(r), tolteImport(r)].filter(Boolean).join(". ").replace(/\.$/, "")) : null;
 }

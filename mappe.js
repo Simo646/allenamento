@@ -6,6 +6,7 @@
 import { mondo, salitaDalTerreno } from "./analisi-file.js";
 import { nativo } from "./sorgenti.js";
 import { ricorda } from "./util.js";
+import { traduci } from "./lingua.js";
 
 const W = 1024, H = 768, TESSERA = 256, Z_MAX = 16, Z_MIN = 9, Z_TESSERE_MAX = 17;
 const MARGINE = 1.3; // la traccia occupa al massimo il 77% del riquadro
@@ -33,7 +34,7 @@ export const raddoppia = (q) => (q.z < Z_TESSERE_MAX ? { z: q.z + 1, x0: q.x0 * 
 
 async function tessera(z, x, y) {
   const r = await fetch(`https://${"abc"[(x + y) % 3]}.tile.opentopomap.org/${z}/${x}/${y}.png`);
-  if (!r.ok) throw new Error(`mappa non disponibile (${r.status})`);
+  if (!r.ok) throw new Error(`${traduci("mappa non disponibile")} (${r.status})`);
   return createImageBitmap(await r.blob());
 }
 
@@ -55,7 +56,7 @@ async function componi({ z, x0, y0, w, h }) {
   }));
   c.globalAlpha = SCHIARISCI;
   c.fillRect(0, 0, w, h);
-  return new Promise((ok, ko) => tela.toBlob((b) => (b ? ok(b) : ko(new Error("immagine della mappa non creata"))), "image/jpeg", 0.8));
+  return new Promise((ok, ko) => tela.toBlob((b) => (b ? ok(b) : ko(new Error(traduci("immagine della mappa non creata")))), "image/jpeg", 0.8));
 }
 
 /* ---------- archivio delle mappe sul telefono ---------- */
@@ -72,7 +73,7 @@ async function archivio(modo, f) {
     const t = d.transaction("mappe", modo);
     const r = f(t.objectStore("mappe"));
     t.oncomplete = () => ok(r?.result);
-    t.onerror = t.onabort = () => ko(t.error ?? new Error("mappa non salvata"));
+    t.onerror = t.onabort = () => ko(t.error ?? new Error(traduci("mappa non salvata")));
   });
 }
 
@@ -123,7 +124,7 @@ async function quoteTerreno(lat, lon) {
   const lista = [...chiavi];
   for (let i = 0; i < lista.length; i += 4) await Promise.all(lista.slice(i, i + 4).map(async (k) => {
     const r = await fetch(`https://elevation-tiles-prod.s3.amazonaws.com/terrarium/${z}/${k}.png`);
-    if (!r.ok) throw new Error(`quote del terreno non disponibili (${r.status})`);
+    if (!r.ok) throw new Error(`${traduci("quote del terreno non disponibili")} (${r.status})`);
     const img = await createImageBitmap(await r.blob(), { colorSpaceConversion: "none", premultiplyAlpha: "none" });
     const tela = document.createElement("canvas");
     tela.width = tela.height = 256;

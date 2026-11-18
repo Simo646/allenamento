@@ -4,6 +4,7 @@
 // - dentro claude.ai niente: negli artifact posizione e Bluetooth sono bloccati.
 // Su 127.0.0.1 la fascia si può sostituire con una finta (window.__fasciaFinta = t => battito) per le prove automatiche.
 import { leggiMisuraFc } from "./analisi-file.js";
+import { T } from "./lingua.js";
 
 const SERVIZIO_FC = "0000180d-0000-1000-8000-00805f9b34fb";
 const MISURA_FC = "00002a37-0000-1000-8000-00805f9b34fb";
@@ -30,16 +31,16 @@ export async function avviaGps(onPos, onErrore, { sfondo = false } = {}) {
   if (nativo()) {
     const bg = plugin("BackgroundGeolocation");
     const opzioni = { requestPermissions: true, stale: false, distanceFilter: 0 };
-    if (sfondo) Object.assign(opzioni, { backgroundTitle: "Registrazione in corso", backgroundMessage: "Allenamento sta registrando percorso e battito." });
+    if (sfondo) Object.assign(opzioni, { backgroundTitle: T("Registrazione in corso"), backgroundMessage: T("InZone sta registrando percorso e battito.") });
     const id = await bg.addWatcher(opzioni, (loc, err) => {
-      if (err) return onErrore(err.code === "NOT_AUTHORIZED" ? "Permesso della posizione negato: attivalo nelle impostazioni dell'app." : err.message || "GPS non disponibile.");
+      if (err) return onErrore(err.code === "NOT_AUTHORIZED" ? T("Permesso della posizione negato: attivalo nelle impostazioni dell'app.") : err.message || T("GPS non disponibile."));
       if (loc) onPos({ t: loc.time ?? Date.now(), lat: loc.latitude, lon: loc.longitude, ele: loc.altitude ?? null, vel: loc.speed ?? null, precisione: loc.accuracy ?? null, precisioneQuota: loc.altitudeAccuracy ?? null });
     });
     return () => bg.removeWatcher({ id }).catch(() => {});
   }
   const id = navigator.geolocation.watchPosition(
     (p) => onPos({ t: p.timestamp || Date.now(), lat: p.coords.latitude, lon: p.coords.longitude, ele: p.coords.altitude ?? null, vel: p.coords.speed ?? null, precisione: p.coords.accuracy ?? null, precisioneQuota: p.coords.altitudeAccuracy ?? null }),
-    (e) => onErrore(e.code === 1 ? "Permesso della posizione negato: attivalo nelle impostazioni del browser." : "Posizione non disponibile, riprovo."),
+    (e) => onErrore(T(e.code === 1 ? "Permesso della posizione negato: attivalo nelle impostazioni del browser." : "Posizione non disponibile, riprovo.")),
     { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
   return () => navigator.geolocation.clearWatch(id);
 }
@@ -93,7 +94,7 @@ async function fasciaNativa(onMisura, onStato) {
   const ble = plugin("BluetoothLe");
   await ble.initialize({ androidNeverForLocation: true });
   const acceso = await ble.isEnabled().then((r) => r.value).catch(() => true);
-  if (!acceso) await ble.requestEnable().catch(() => { throw new Error("Accendi il Bluetooth e riprova."); });
+  if (!acceso) await ble.requestEnable().catch(() => { throw new Error(T("Accendi il Bluetooth e riprova.")); });
   const dev = await ble.requestDevice({ services: [SERVIZIO_FC] });
   const id = dev.deviceId;
   let attiva = true, ascoltoMisure = null, ascoltoStacco = null, ricollegando = false;
@@ -127,7 +128,7 @@ async function fasciaNativa(onMisura, onStato) {
   } catch (e) { attiva = false; ascoltoStacco?.remove?.(); throw e; }
   onStato("connessa");
   return {
-    nome: dev.name || "Fascia cardio",
+    nome: dev.name || T("Fascia cardio"),
     async scollega() {
       attiva = false;
       try { await ble.stopNotifications({ deviceId: id, service: SERVIZIO_FC, characteristic: MISURA_FC }); } catch { /* già staccata */ }
@@ -138,7 +139,7 @@ async function fasciaNativa(onMisura, onStato) {
 }
 
 async function fasciaBrowser(onMisura, onStato) {
-  if (!navigator.bluetooth) throw new Error("Su questo telefono il browser non può collegarsi a una fascia: registro solo il percorso.");
+  if (!navigator.bluetooth) throw new Error(T("Su questo telefono il browser non può collegarsi a una fascia: registro solo il percorso."));
   const dev = await navigator.bluetooth.requestDevice({ filters: [{ services: ["heart_rate"] }] });
   let attiva = true;
   const avvia = async () => {
@@ -198,7 +199,7 @@ export async function notificaZona(titolo, testo) {
   if (!nativo()) return;
   const n = plugin("LocalNotifications");
   try {
-    canaleZona ??= n.createChannel({ id: "zona", name: "Avvisi di zona", description: "Battito fuori dalla zona scelta durante la registrazione", importance: 4, vibration: true, visibility: 1 });
+    canaleZona ??= n.createChannel({ id: "zona", name: T("Avvisi di zona"), description: T("Battito fuori dalla zona scelta durante la registrazione"), importance: 4, vibration: true, visibility: 1 });
     try { await canaleZona; } catch { canaleZona = null; } // la prossima volta si riprova a crearlo
     await n.schedule({ notifications: [{ id: 7001, title: titolo, body: testo, channelId: "zona", smallIcon: "ic_registrazione" }] });
   } catch { /* senza permesso delle notifiche restano i bip */ }
@@ -211,7 +212,7 @@ export async function permessoNotifiche() {
 }
 
 /* ---------- file: backup e GPX con il pannello Condividi di Android ---------- */
-export async function condividiFile(nome, testo, titolo = "Salva il backup") {
+export async function condividiFile(nome, testo, titolo = T("Salva il backup")) {
   const { uri } = await plugin("Filesystem").writeFile({ path: nome, data: testo, directory: "CACHE", encoding: "utf8" });
   await plugin("Share").share({ title: nome, files: [uri], dialogTitle: titolo });
 }
@@ -232,7 +233,7 @@ export async function salvaFile(nome, testo, { tipo = "application/octet-stream"
 // Un file per giorno; restano le ultime `tieni` copie. Android lascia toccare solo i file creati da questa
 // installazione: quelli di un'installazione precedente restano dove sono, e se il nome è già preso se ne usa un altro.
 const CARTELLA_COPIE = "Allenamento";
-export const DOVE_COPIE = "Documenti › Allenamento";
+export const DOVE_COPIE = T("Documenti › Allenamento");
 export async function salvaCopia(giorno, testo, tieni = 5) {
   const fs = plugin("Filesystem");
   const scrivi = (nome) => fs.writeFile({ path: `${CARTELLA_COPIE}/${nome}`, data: testo, directory: "DOCUMENTS", encoding: "utf8", recursive: true });
@@ -277,7 +278,7 @@ export function fileInArrivo(onFile, onErrore) {
       const formato = formatoDa(byte);
       if (formato && !nome.toLowerCase().endsWith("." + formato)) nome = `${nome.replace(/\.[^.]*$/, "")}.${formato}`;
       onFile(new File([byte], nome, { type: r.tipo || "application/octet-stream" }));
-    } catch (e) { onErrore?.(e?.message ?? "file non letto"); }
+    } catch (e) { onErrore?.(e?.message ?? T("file non letto")); }
   };
   p.addListener("file", prendi).catch(() => {});
   prendi();

@@ -7,6 +7,7 @@
 // Interfaccia: ascolta(collezione, cb(docs), errore) → stop; elenco(collezione); leggi(collezione, id);
 // scrivi(collezione, id, dati) sostituisce tutto il documento; elimina(collezione, id).
 // Ogni documento consegnato ha il suo `id`; il campo `id` non si salva nel corpo.
+import { traduci } from "./lingua.js";
 
 const senzaId = ({ id, ...resto }) => JSON.parse(JSON.stringify(resto)); // via undefined e funzioni
 
@@ -45,7 +46,7 @@ async function archivioBrowser() {
       r.onupgradeneeded = () => r.result.createObjectStore("doc");
       r.onsuccess = () => (scaduto ? r.result.close() : ok(r.result));
       r.onerror = () => ko(r.error);
-      setTimeout(() => { scaduto = true; ko(new Error("IndexedDB non risponde")); }, 10000);
+      setTimeout(() => { scaduto = true; ko(new Error(traduci("IndexedDB non risponde"))); }, 10000);
     });
     const righe = await new Promise((ok, ko) => {
       const out = [];
@@ -75,7 +76,7 @@ async function archivioBrowser() {
     v === undefined ? t.objectStore("doc").delete(k) : t.objectStore("doc").put(v, k);
     t.oncomplete = () => ok();
     // onabort: per esempio memoria del telefono piena. Senza, il salvataggio resterebbe in attesa per sempre.
-    t.onerror = t.onabort = () => ko(t.error ?? new Error("Il telefono non ha salvato i dati: forse la memoria è piena"));
+    t.onerror = t.onabort = () => ko(t.error ?? new Error(traduci("Il telefono non ha salvato i dati: forse la memoria è piena")));
   });
   // Se il salvataggio su disco fallisce, il dato torna com'era: l'app non deve mostrare come salvato ciò che non lo è.
   const conRipristino = async (c, id, prima, k, v) => {

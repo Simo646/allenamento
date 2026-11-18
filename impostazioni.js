@@ -8,6 +8,7 @@ import { nativo, condividiFile, salute, saluteNelTelefono, salvaCopia, DOVE_COPI
 import { saluteAttiva, impostaSalute, importaDaSalute, testoImport, riassuntoLettura } from "./salute.js";
 import { scartaInterrotta } from "./dal-vivo.js";
 import { mappePossibili, mappeAttive, impostaMappe, eliminaTutteLeMappe } from "./mappe.js";
+import { T, LOCALE, LINGUA_SCELTA } from "./lingua.js";
 
 const ANNO = new Date().getFullYear();
 const numInput = (id, valore, ph, onv) => el("input", { id, inputmode: "numeric", value: valore ?? "", placeholder: ph ?? "", oninput: (e) => onv(numero(e.target.value)) });
@@ -27,15 +28,15 @@ function bloccoZone(p, alCambio) {
     if (!manuali && r.limiti) manuali = [...r.limiti];
     const metodi = [["eta", "Dall'età"], ["karvonen", "Con la FC a riposo"], ["manuale", "A mano"]];
     const spiegazione = p.metodo_zone === "eta"
-      ? `FC massima ${p.fc_max_misurata ? "misurata" : "stimata con 208 − 0,7 × età"}: ${r.fcMax ?? "—"} bpm. Zone al 60, 70, 80 e 90% della FC massima.`
-      : p.metodo_zone === "karvonen" ? `Metodo di Karvonen: percentuali della riserva cardiaca, tra la FC a riposo (${p.fc_riposo ?? "—"}) e la massima (${r.fcMax ?? "—"}). Più preciso se conosci la FC a riposo.`
+      ? T(p.fc_max_misurata ? "FC massima misurata: {0} bpm. Zone al 60, 70, 80 e 90% della FC massima." : "FC massima stimata con 208 − 0,7 × età: {0} bpm. Zone al 60, 70, 80 e 90% della FC massima.", r.fcMax ?? "—")
+      : p.metodo_zone === "karvonen" ? T("Metodo di Karvonen: percentuali della riserva cardiaca, tra la FC a riposo ({0}) e la massima ({1}). Più preciso se conosci la FC a riposo.", p.fc_riposo ?? "—", r.fcMax ?? "—")
       : "Scrivi il limite superiore di Z1, Z2, Z3 e Z4, per esempio quelli di un test o del tuo orologio.";
     metti(box, 
       el("div", { class: "seg", role: "group", "aria-label": "Metodo" }, metodi.map(([m, t]) =>
         el("button", { type: "button", "aria-pressed": String(p.metodo_zone === m), onclick: () => { p.metodo_zone = m; if (m !== "manuale") manuali = null; disegna(); alCambio?.(); } }, t))),
       el("p", { class: "sotto" }, spiegazione),
       p.metodo_zone === "manuale" ? el("div", { class: "righe" }, [0, 1, 2, 3].map((i) =>
-        campo(`Fine Z${i + 1}`, numInput(`z-lim-${i}`, manuali?.[i], "", (v) => { manuali[i] = v; anteprima(); alCambio?.(); })))) : null,
+        campo(T("Fine Z{0}", i + 1), numInput(`z-lim-${i}`, manuali?.[i], "", (v) => { manuali[i] = v; anteprima(); alCambio?.(); })))) : null,
       el("div", { class: "zone-anteprima", id: "z-anteprima" }));
     anteprima();
   }
@@ -44,7 +45,7 @@ function bloccoZone(p, alCambio) {
     if (!a) return;
     if (!r.limiti) return a.replaceChildren(el("p", { class: "esito err" }, r.errore));
     const l = r.limiti;
-    const range = (i) => (i === 0 ? `fino a ${l[0]}` : i === 4 ? `da ${l[3] + 1}${r.fcMax ? " a " + r.fcMax : ""}` : `${l[i - 1] + 1}–${l[i]}`);
+    const range = (i) => (i === 0 ? T("fino a {0}", l[0]) : i === 4 ? (r.fcMax ? T("da {0} a {1}", l[3] + 1, r.fcMax) : T("da {0}", l[3] + 1)) : `${l[i - 1] + 1}–${l[i]}`);
     const nomi = ["Recupero", "Fondo, aerobico", "Ritmo", "Soglia", "Massimo"];
     a.replaceChildren(...ZONE.map((z, i) => el("div", {},
       el("span", { class: "chip-zona", style: `background:var(--z${i + 1});color:var(--z${i + 1}-ink)` }, z),
@@ -67,8 +68,9 @@ registraVista("avvio", { vivo: false, render(main) {
 
   if (avvio.passo === 0) {
     const eta = el("p", { class: "sotto num" });
-    const aggiornaEta = () => { const e = etaDa(p.anno_nascita); eta.textContent = e ? `${e} anni · FC massima stimata ${fcMaxDaEta(e)} bpm` : ""; };
+    const aggiornaEta = () => { const e = etaDa(p.anno_nascita); eta.textContent = e ? T("{0} anni · FC massima stimata {1} bpm", e, fcMaxDaEta(e)) : ""; };
     corpo = [
+      el("fieldset", { class: "campo" }, el("legend", {}, "Lingua"), sceltaLingua()),
       el("p", {}, "Questa app ti aiuta a programmare la settimana, registrare forza e uscite e vedere come migliori. Prima, due dati per calcolare le tue zone di battito."),
       campo("Come ti chiami (facoltativo)", el("input", { id: "a-nome", value: p.nome ?? "", autocomplete: "given-name", oninput: (e) => (p.nome = e.target.value.trim()) })),
       el("div", { class: "righe" },
@@ -123,11 +125,11 @@ registraVista("avvio", { vivo: false, render(main) {
       avvio = null;
       avviso("Pronto. Buon allenamento!");
       vai("oggi");
-    } catch (e) { esito(esitoA, "Non salvato: " + (e?.message ?? "errore"), "err"); bottoneAvanti.disabled = false; }
+    } catch (e) { esito(esitoA, T("Non salvato: {0}", e?.message ?? T("errore")), "err"); bottoneAvanti.disabled = false; }
   };
 
   metti(main, 
-    testata({ titolo: passi[avvio.passo], sopra: `Primo avvio · ${avvio.passo + 1} di ${passi.length}`, destra: el("span") }),
+    testata({ titolo: passi[avvio.passo], sopra: T("Primo avvio · {0} di {1}", avvio.passo + 1, passi.length), destra: el("span") }),
     el("div", { class: "passi", "aria-hidden": "true" }, passi.map((_, i) => el("i", { class: i <= avvio.passo ? "fatto" : "" }))),
     el("section", { class: "card modulo" }, corpo),
     esitoA,
@@ -175,7 +177,7 @@ registraVista("impostazioni", { vivo: false, render(main) {
       const cambiate = JSON.stringify(r.limiti) !== JSON.stringify(stato.profilo.zone);
       await salvaProfilo({ ...stato.profilo, nome: p.nome, anno_nascita: p.anno_nascita, fc_riposo: p.fc_riposo, fc_max_misurata: p.fc_max_misurata, metodo_zone: p.metodo_zone, zone: r.limiti });
       esito(esitoP, cambiate ? "Salvato. Le nuove zone valgono per i prossimi file: puoi ricalcolare anche quelli già salvati." : "Salvato.", "ok");
-    } catch (e) { esito(esitoP, "Non salvato: " + (e?.message ?? "errore"), "err"); }
+    } catch (e) { esito(esitoP, T("Non salvato: {0}", e?.message ?? T("errore")), "err"); }
     finally { salvaP.disabled = false; }
   };
   ricalcola.onclick = async () => {
@@ -185,25 +187,25 @@ registraVista("impostazioni", { vivo: false, render(main) {
     let fatti = 0;
     try {
       for (const s of lista) {
-        esito(esitoP, `Ricalcolo ${fatti + 1} di ${lista.length}…`);
+        esito(esitoP, T("Ricalcolo {0} di {1}…", fatti + 1, lista.length));
         const d = await stato.archivio.leggi("dettagli", s.id);
         const zone = zoneDaCurva(d?.curva_fc, limiti());
         if (zone) { await stato.archivio.scrivi("sessioni", s.id, { ...s, ...zone }); fatti++; }
       }
-      esito(esitoP, `Zone ricalcolate su ${fatti} allenamenti, dalla curva del battito salvata (approssimata ai 15 secondi).`, "ok");
-    } catch (e) { esito(esitoP, `Ricalcolati ${fatti}, poi un errore: ${e?.message ?? "riprova"}.`, "err"); }
+      esito(esitoP, T("Zone ricalcolate su {0} allenamenti, dalla curva del battito salvata (approssimata ai 15 secondi).", fatti), "ok");
+    } catch (e) { esito(esitoP, T("Ricalcolati {0}, poi un errore: {1}.", fatti, e?.message ?? T("riprova")), "err"); }
     finally { ricalcola.disabled = false; }
   };
 
   // Attività e moduli: si salvano subito.
-  const salvaSubito = async () => { try { await salvaProfilo({ ...stato.profilo, attivita: p.attivita, moduli: p.moduli, recupero: p.recupero }); avviso("Salvato"); } catch (e) { avviso("Non salvato: " + (e?.message ?? "errore")); } };
+  const salvaSubito = async () => { try { await salvaProfilo({ ...stato.profilo, attivita: p.attivita, moduli: p.moduli, recupero: p.recupero }); avviso("Salvato"); } catch (e) { avviso(T("Non salvato: {0}", e?.message ?? T("errore"))); } };
   const recuperoBox = el("div", {},
     el("p", { class: "sotto" }, "Controllo del recupero: con Battito nel sonno o Battito a riposo l'app ti avvisa quando il battito (nel sonno o a riposo) è più alto della tua media."),
     el("div", { class: "righe" },
       campo("Avviso sopra la media di (bpm)", el("select", { id: "r-scarto", onchange: (e) => { p.recupero = { ...p.recupero, scarto_bpm: Number(e.target.value) }; salvaSubito(); } },
         [2, 3, 4, 5, 6, 8].map((n) => el("option", { value: n, selected: p.recupero.scarto_bpm === n }, `+${n}`)))),
       campo("Media sulle ultime", el("select", { id: "r-notti", onchange: (e) => { p.recupero = { ...p.recupero, notti: Number(e.target.value) }; salvaSubito(); } },
-        [7, 14, 28].map((n) => el("option", { value: n, selected: p.recupero.notti === n }, `${n} notti`))))));
+        [7, 14, 28].map((n) => el("option", { value: n, selected: p.recupero.notti === n }, T("{0} notti", n)))))));
   const conRecupero = () => (recuperoBox.hidden = !p.moduli.battito_sonno && !p.moduli.riposo);
   conRecupero();
 
@@ -242,16 +244,16 @@ function cardSalute() {
   const mostra = (st) => {
     if (!st?.disponibile) {
       interruttore.disabled = true;
-      permessi.textContent = "Health Connect non c'è su questo telefono: serve Android 14 o successivo.";
+      permessi.textContent = T("Health Connect non c'è su questo telefono: serve Android 14 o successivo.");
       return;
     }
     const si = VOCI.filter(([k]) => st[k]).map(([, n]) => n), no = VOCI.filter(([k]) => !st[k]).map(([, n]) => n);
     mancanti.hidden = !saluteAttiva() || !no.length;
     const u = ricorda.leggi("salute-ultimo");
     permessi.textContent = !saluteAttiva() ? "" : [
-      si.length ? `Legge: ${si.join(", ")}.` : "Nessun permesso concesso.",
-      si.length && no.length ? `Senza permesso: ${no.join(", ")}.` : "",
-      u ? `Ultima importazione: ${new Date(u).toLocaleString("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}.` : "",
+      si.length ? T("Legge: {0}.", si.map((x) => T(x)).join(", ")) : T("Nessun permesso concesso."),
+      si.length && no.length ? T("Senza permesso: {0}.", no.map((x) => T(x)).join(", ")) : "",
+      u ? T("Ultima importazione: {0}.", new Date(u).toLocaleString(LOCALE, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })) : "",
     ].filter(Boolean).join(" ");
     // Che cosa ha scritto ogni app: serve a capire se battito e ossigeno arrivano davvero.
     const l = saluteAttiva() ? riassuntoLettura() : null;
@@ -263,7 +265,7 @@ function cardSalute() {
     importa.disabled = true;
     esito(esitoS, "Leggo da Health Connect…");
     try { esito(esitoS, testoImport(await importaDaSalute()), "ok"); }
-    catch (e) { esito(esitoS, "Non riuscito: " + (e?.message ?? "errore"), "err"); }
+    catch (e) { esito(esitoS, T("Non riuscito: {0}", e?.message ?? T("errore")), "err"); }
     finally { importa.disabled = false; aggiorna(); }
   };
   interruttore.onchange = async () => {
@@ -311,12 +313,20 @@ function cardAspetto() {
     el("input", { type: "checkbox", id, role: "switch", checked: acceso, onchange: (e) => cambia(e.target.checked) }));
   const cancellaMappe = conConferma(el("button", { type: "button", class: "lnk", style: "justify-self:start" }, "Cancella le mappe salvate"), "Tocca di nuovo",
     async () => { await eliminaTutteLeMappe(); avviso("Mappe cancellate"); });
-  return el("section", { class: "card modulo" }, el("h2", {}, "Aspetto e mappe"),
+  return el("section", { class: "card modulo" }, el("h2", {}, "Lingua, aspetto e mappe"),
+    el("fieldset", { class: "campo" }, el("legend", {}, "Lingua"), sceltaLingua()),
     el("div", {},
       voce("i-tema", "Tema scuro", "Fondo nero e testo chiaro, come un ciclocomputer di notte.", temaScuro(), (si) => applicaTema(si)),
       mappePossibili() ? voce("i-mappe", "Mappa e quote del terreno", "Salvando un'uscita col GPS scarica la mappa della zona da OpenTopoMap e, se il telefono non ha il barometro, le quote del terreno da AWS per un dislivello giusto.", mappeAttive(), (si) => impostaMappe(si)) : null),
     mappePossibili() ? el("p", { class: "sotto" }, "OpenTopoMap e AWS ricevono solo la zona del percorso (e l'indirizzo IP, come ogni sito), non i tuoi allenamenti. Le mappe restano su questo telefono e non vanno nel backup.") : null,
     mappePossibili() ? cancellaMappe : null);
+}
+
+// Lingua su questo dispositivo ("Come il telefono" segue la lingua di Android): si applica ricaricando l'app.
+function sceltaLingua() {
+  const voci = [[null, "Come il telefono"], ["it", "Italiano"], ["en", "English"]];
+  return el("div", { class: "seg", role: "group", "aria-label": "Lingua" }, voci.map(([v, testo]) =>
+    el("button", { type: "button", "aria-pressed": String(LINGUA_SCELTA === v), onclick: () => { if (LINGUA_SCELTA === v) return; ricorda.scrivi("lingua", v); location.reload(); } }, testo)));
 }
 
 /* ---------- dati: backup, ripristino, cancellazione ---------- */
@@ -349,32 +359,32 @@ export async function esportaBackup() {
     const testo = await testoBackup();
     // App Android: il file va nel pannello Condividi (Drive, Dropbox, File…).
     if (nativo()) {
-      try { await condividiFile(`allenamento-backup-${oggi()}.json`, testo); return fatto("Backup pronto: scegli dove salvarlo."); }
-      catch (e) { return /cancel/i.test(e?.message ?? "") ? ["Backup annullato.", ""] : ["Backup non riuscito: " + (e?.message ?? "errore"), "err"]; }
+      try { await condividiFile(`inzone-backup-${oggi()}.json`, testo); return fatto(T("Backup pronto: scegli dove salvarlo.")); }
+      catch (e) { return /cancel/i.test(e?.message ?? "") ? [T("Backup annullato."), ""] : [T("Backup non riuscito: {0}", e?.message ?? T("errore")), "err"]; }
     }
     const dl = await window.claude?.use?.("downloads");
     if (dl) {
-      try { await dl.save({ filename: `allenamento-backup-${oggi()}.json`, data: testo }); return fatto("Backup salvato."); }
-      catch (e) { if (e?.code === "declined") return ["Backup annullato.", ""]; }
+      try { await dl.save({ filename: `inzone-backup-${oggi()}.json`, data: testo }); return fatto(T("Backup salvato.")); }
+      catch (e) { if (e?.code === "declined") return [T("Backup annullato."), ""]; }
     }
     // Fuori da claude.ai (app installata dal sito) il file si condivide dal telefono o si scarica come su un sito normale.
     if (!window.claude) {
-      const nome = `allenamento-backup-${oggi()}.json`;
+      const nome = `inzone-backup-${oggi()}.json`;
       const file = new File([testo], nome, { type: "application/json" });
       if (matchMedia("(pointer: coarse)").matches && navigator.canShare?.({ files: [file] })) {
-        try { await navigator.share({ files: [file], title: "Backup allenamento" }); return fatto("Backup pronto: salvalo in File, Drive o Dropbox."); }
-        catch (e) { if (e?.name === "AbortError") return ["Backup annullato.", ""]; }
+        try { await navigator.share({ files: [file], title: "Backup InZone" }); return fatto(T("Backup pronto: salvalo in File, Drive o Dropbox.")); }
+        catch (e) { if (e?.name === "AbortError") return [T("Backup annullato."), ""]; }
       }
       const a = el("a", { href: URL.createObjectURL(file), download: nome });
       document.body.append(a);
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 10000);
-      return fatto("Backup scaricato.");
+      return fatto(T("Backup scaricato."));
     }
-    try { await navigator.clipboard.writeText(testo); return fatto("Backup copiato negli appunti: incollalo in un file di testo e salvalo."); }
-    catch { return ["Non riesco a salvare il file da qui. Prova dal computer.", "err"]; }
-  } catch (e) { return ["Backup non riuscito: " + (e?.message ?? "errore"), "err"]; }
+    try { await navigator.clipboard.writeText(testo); return fatto(T("Backup copiato negli appunti: incollalo in un file di testo e salvalo.")); }
+    catch { return [T("Non riesco a salvare il file da qui. Prova dal computer."), "err"]; }
+  } catch (e) { return [T("Backup non riuscito: {0}", e?.message ?? T("errore")), "err"]; }
 }
 
 // Scelta del file e pulsante di importazione; `dopo` si chiama a importazione finita (dal primo avvio: vai a Oggi).
@@ -390,9 +400,9 @@ function bloccoImporta(esitoD, dopo) {
     try {
       daImportare = validaBackup(await f.text());
       const n = COLLEZIONI.reduce((a, c) => a + daImportare[c].length, 0);
-      esito(esitoD, `Backup letto: ${daImportare.sessioni.length} allenamenti, ${daImportare.schede.length} schede, ${n} documenti in tutto. I documenti con lo stesso nome vengono sostituiti, gli altri restano.`);
+      esito(esitoD, T("Backup letto: {0} allenamenti, {1} schede, {2} documenti in tutto. I documenti con lo stesso nome vengono sostituiti, gli altri restano.", daImportare.sessioni.length, daImportare.schede.length, n));
       importa.hidden = false;
-    } catch (e) { esito(esitoD, "File non valido: " + (e?.message ?? "errore"), "err"); }
+    } catch (e) { esito(esitoD, T("File non valido: {0}", e?.message ?? T("errore")), "err"); }
   });
   conConferma(importa, "Tocca di nuovo per importare", async () => {
     let fatti = 0;
@@ -400,10 +410,10 @@ function bloccoImporta(esitoD, dopo) {
       for (const c of COLLEZIONI) for (const d of daImportare[c]) { await stato.archivio.scrivi(c, d.id, d); fatti++; }
       if (daImportare.settimana) await salvaSettimana(daImportare.settimana);
       if (daImportare.profilo) await salvaProfilo({ ...daImportare.profilo, avvio_completato: true });
-      esito(esitoD, `Importati ${fatti} documenti.`, "ok");
+      esito(esitoD, T("Importati {0} documenti.", fatti), "ok");
       importa.hidden = true;
       dopo?.();
-    } catch (e) { esito(esitoD, `Importati ${fatti}, poi un errore: ${e?.message ?? "riprova"}.`, "err"); }
+    } catch (e) { esito(esitoD, T("Importati {0}, poi un errore: {1}.", fatti, e?.message ?? T("riprova")), "err"); }
   });
   return [el("label", { class: "btn", for: "backup-file" }, "Scegli un backup da importare", file), importa];
 }
@@ -431,14 +441,14 @@ function cardDati() {
     const statoCopia = el("p", { class: "sotto" });
     const mostra = () => {
       const u = ricorda.leggi("copia-auto-ultima"), err = ricorda.leggi("copia-auto-errore");
-      statoCopia.textContent = !copiaAutoAttiva() ? "" : err ? `L'ultima copia non è riuscita (${err}): riprovo alla prossima apertura.`
-        : u ? `Ultima copia: ${new Date(u).toLocaleDateString("it-IT", { day: "numeric", month: "long" })}, in ${DOVE_COPIE}.` : "La prima copia si fa alla prossima apertura dell'app.";
+      statoCopia.textContent = !copiaAutoAttiva() ? "" : err ? T("L'ultima copia non è riuscita ({0}): riprovo alla prossima apertura.", err)
+        : u ? T("Ultima copia: {0}, in {1}.", new Date(u).toLocaleDateString(LOCALE, { day: "numeric", month: "long" }), DOVE_COPIE) : T("La prima copia si fa alla prossima apertura dell'app.");
     };
     mostra();
     copia = el("div", {},
       el("label", { class: "interruttore" },
         el("span", {}, el("b", {}, "Copia automatica sul telefono"),
-          el("small", {}, `Una volta al giorno, aprendo l'app, salva da sola una copia dei dati in ${DOVE_COPIE} (restano le ultime 5). Ti salva se l'app viene disinstallata; se perdi il telefono serve il backup qui sotto.`)),
+          el("small", {}, T("Una volta al giorno, aprendo l'app, salva da sola una copia dei dati in {0} (restano le ultime 5). Ti salva se l'app viene disinstallata; se perdi il telefono serve il backup qui sotto.", DOVE_COPIE))),
         el("input", { type: "checkbox", id: "i-copia", role: "switch", checked: copiaAutoAttiva(), onchange: async (e) => {
           ricorda.scrivi("copia-auto", e.target.checked ? null : false);
           if (e.target.checked) await copiaAutomatica();
@@ -460,15 +470,15 @@ function cardDati() {
       applicaTema();
       avviso("Dati cancellati");
       vai("avvio");
-    } catch (e) { esito(esitoD, "Cancellazione interrotta: " + (e?.message ?? "errore"), "err"); }
+    } catch (e) { esito(esitoD, T("Cancellazione interrotta: {0}", e?.message ?? T("errore")), "err"); }
   });
 
   return el("section", { class: "card modulo" }, el("h2", {}, "I tuoi dati"),
     el("p", { class: "sotto" }, testoModo),
     copia,
     el("div", { class: "azioni" }, esporta, scegli, importa),
-    el("p", { class: "sotto" }, (ultimo ? `Ultimo backup: ${new Date(ultimo).toLocaleDateString("it-IT", { day: "numeric", month: "long" })}. ` : "Nessun backup ancora. ") +
-      "Ogni 7 giorni Oggi te lo ricorda. Il backup contiene anche le tracce GPS, che mostrano da dove parti: salvalo in un posto privato e non condividerlo."),
+    el("p", { class: "sotto" }, (ultimo ? T("Ultimo backup: {0}.", new Date(ultimo).toLocaleDateString(LOCALE, { day: "numeric", month: "long" })) : T("Nessun backup ancora.")) + " " +
+      T("Ogni 7 giorni Oggi te lo ricorda. Il backup contiene anche le tracce GPS, che mostrano da dove parti: salvalo in un posto privato e non condividerlo.")),
     esitoD,
     el("div", { class: "azioni", style: "border-top:1px solid var(--line);padding-top:12px" }, cancella));
 }

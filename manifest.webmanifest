@@ -1,6 +1,6 @@
 {
-  "name": "Allenamento su misura",
-  "short_name": "Allenamento",
+  "name": "InZone",
+  "short_name": "InZone",
   "description": "Programma la settimana, registra le sessioni (forza serie per serie, timer HIIT, uscite col GPS o dai file del dispositivo) e segui i progressi sulle tue zone di battito.",
   "lang": "it",
   "start_url": "./",

@@ -1,6 +1,7 @@
 // Timer HIIT, senza DOM: dalle impostazioni (durata dell'esercizio, esercizi per giro, pausa tra gli esercizi, giri,
 // pausa tra i giri) la sequenza delle fasi in secondi dall'avvio, la fase in corso a un certo istante e gli istanti
 // dei segnali sonori. Lo usa dal-vivo.js; i test lo provano in node.
+import { T } from "./lingua.js";
 
 export const HIIT_PREDEFINITO = { lavoro_s: 40, n: 4, pausa_s: 20, giri: 3, recupero_giri_s: 90, preparazione_s: 10 };
 
@@ -11,7 +12,7 @@ export const impostazioniDa = (scheda) => scheda ? {
 } : { ...HIIT_PREDEFINITO };
 
 // Gli esercizi del giro: i nomi della scheda, allungati o accorciati al numero scelto.
-export const eserciziDelGiro = (nomi = [], n) => Array.from({ length: Math.max(1, n || 1) }, (_, i) => nomi[i]?.trim() || `Esercizio ${i + 1}`);
+export const eserciziDelGiro = (nomi = [], n) => Array.from({ length: Math.max(1, n || 1) }, (_, i) => nomi[i]?.trim() || T("Esercizio {0}", i + 1));
 
 // Fasi: [{tipo: "preparazione" | "lavoro" | "pausa" | "recupero", da, a, giro, n, esercizio}]. Il recupero tra i giri
 // sostituisce la pausa dopo l'ultimo esercizio del giro; dopo l'ultimo esercizio dell'ultimo giro si finisce.

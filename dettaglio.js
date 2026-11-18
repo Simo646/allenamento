@@ -8,6 +8,7 @@ import { leggiMappa, scaricaMappa, eliminaMappa, mappeAttive, quotaDalTerreno } 
 import { testoSerie, CARDIO } from "./dati.js";
 import { recordDi } from "./record.js";
 import { caricoSessione, FATICA } from "./carico.js";
+import { T, traduci } from "./lingua.js";
 
 export const zoneDi = (s) => [s.z1_min, s.z2_min, s.z3_min, s.z4_min, s.z5_min];
 export const haZone = (s) => zoneDi(s).some((z) => z != null);
@@ -21,10 +22,10 @@ export function metriche(s) {
   if (s.salita_m) p.push("↑ " + fmtNum(s.salita_m) + " m");
   if (s.tipo === "Bici" && s.vel_media) p.push(fmtNum(s.vel_media, 1) + " km/h");
   if (conPasso(s.tipo) && s.km > 0 && s.durata_min) p.push(fmtPasso(s.km, s.durata_min) + " /km");
-  if (s.fc_media != null) p.push(`FC ${s.fc_media}${s.fc_max != null ? "/" + s.fc_max : ""}`);
-  if (s.hiit) p.push(`${s.hiit.giri_fatti ?? s.hiit.giri} giri × ${s.hiit.esercizi?.length ?? 0} esercizi`);
+  if (s.fc_media != null) p.push(`${T("FC")} ${s.fc_media}${s.fc_max != null ? "/" + s.fc_max : ""}`);
+  if (s.hiit) p.push(T("{0} giri × {1} esercizi", s.hiit.giri_fatti ?? s.hiit.giri, s.hiit.esercizi?.length ?? 0));
   if (s.esercizi?.length) {
-    p.push(`${s.esercizi.length} esercizi`);
+    p.push(T("{0} esercizi", s.esercizi.length));
     const v = volumeSessione(s);
     if (v) p.push(fmtNum(v) + " kg");
   }
@@ -35,7 +36,7 @@ export function barraZone(s) {
   const z = zoneDi(s).map((x) => x ?? 0);
   const tot = z.reduce((a, b) => a + b, 0);
   if (!tot) return null;
-  return el("div", { class: "barra-zone", "aria-label": "Tempo in zona: " + z.map((m, i) => `${ZONE[i]} ${fmtNum(m)} min`).join(", ") },
+  return el("div", { class: "barra-zone", "aria-label": T("Tempo in zona: {0}", z.map((m, i) => `${ZONE[i]} ${fmtNum(m)} min`).join(", ")) },
     z.map((m, i) => (m > 0 ? el("i", { style: `width:${(m / tot) * 100}%;background:${COLORE_ZONA[i]}`, title: `${ZONE[i]} ${fmtNum(m, 1)} min` }) : null)));
 }
 
@@ -100,9 +101,9 @@ export function apriDettaglio(id) {
   ].filter((c) => c && c[1] != null);
   const car = caricoSessione(s);
   const spiega = car.carico ? el("details", { class: "spiega" }, el("summary", {}, "Cosa vuol dire il carico"),
-    el("p", { class: "sotto" }, `Carico: quanto ha pesato l'allenamento, in punti (1 punto ≈ 1 minuto in Z2; le zone alte pesano di più). `
-      + { battito: "Qui viene dal tempo in zona del battito.", fatica: `Qui viene dalla durata e dalla fatica percepita (${s.fatica}).`, stima: "Qui è stimato dalla durata e dal tipo, perché mancano battito e fatica percepita: segnala la fatica in Modifica per renderlo preciso." }[car.da]
-      + " Sommato giorno per giorno dà le linee di Carico e forma in Analisi.")) : null;
+    el("p", { class: "sotto" }, [T("Carico: quanto ha pesato l'allenamento, in punti (1 punto ≈ 1 minuto in Z2; le zone alte pesano di più)."),
+      { battito: T("Qui viene dal tempo in zona del battito."), fatica: T("Qui viene dalla durata e dalla fatica percepita ({0}).", s.fatica), stima: T("Qui è stimato dalla durata e dal tipo, perché mancano battito e fatica percepita: segnala la fatica in Modifica per renderlo preciso.") }[car.da],
+      T("Sommato giorno per giorno dà le linee di Carico e forma in Analisi.")].join(" "))) : null;
   // Griglia senza buchi: l'ultimo campo si allarga sulle colonne rimaste vuote.
   const colonne = campi.length === 4 ? 2 : Math.min(3, campi.length);
   const avanzo = campi.length % colonne;
@@ -115,7 +116,7 @@ export function apriDettaglio(id) {
     const z = zoneDi(s), tot = z.reduce((a, b) => a + (b ?? 0), 0);
     zoneBox = el("section", { class: "card" }, el("h2", {}, "Tempo in zona"), barraZone(s),
       el("div", { class: "tabella" }, el("table", {},
-        el("thead", {}, el("tr", {}, el("th", {}, "Zona"), el("th", {}, "bpm"), el("th", {}, "Minuti"), el("th", {}, "Quota"))),
+        el("thead", {}, el("tr", {}, el("th", {}, "Zona"), el("th", {}, "bpm"), el("th", {}, "Minuti"), el("th", {}, "%"))),
         el("tbody", {}, z.map((m, i) => el("tr", {},
           el("td", {}, el("span", { style: "display:inline-flex;align-items:center;gap:6px" }, el("i", { class: "dot", style: `background:${COLORE_ZONA[i]}` }), ZONE[i])),
           el("td", {}, intervalloZona(i, lim)), el("td", {}, fmtNum(m ?? 0, 1)), el("td", {}, tot ? fmtNum(((m ?? 0) / tot) * 100) + "%" : "—")))))));
@@ -135,7 +136,7 @@ export function apriDettaglio(id) {
   // HIIT registrato col timer: tempi, giri fatti ed esercizi del giro.
   const h = s.hiit;
   const timer = h ? el("section", { class: "card" }, el("h2", {}, "Timer HIIT"),
-    el("p", { class: "num" }, `${h.giri_fatti ?? h.giri} giri su ${h.giri} · ${h.lavoro_s}" per esercizio · ${h.pausa_s}" di pausa · ${h.recupero_giri_s}" tra i giri`),
+    el("p", { class: "num" }, T("{0} giri su {1} · {2}\" per esercizio · {3}\" di pausa · {4}\" tra i giri", h.giri_fatti ?? h.giri, h.giri, h.lavoro_s, h.pausa_s, h.recupero_giri_s)),
     el("ol", { class: "foglio-scheda" }, (h.esercizi ?? []).map((nome, i) => el("li", {}, el("span", { class: "n" }, String(i + 1)), el("b", {}, nome))))) : null;
 
   // Modifica
@@ -162,7 +163,7 @@ export function apriDettaglio(id) {
         ...Object.fromEntries(CAMPI_MODIFICABILI.map(([k]) => [k, numero(numeri[k].value)])), fatica };
       await stato.archivio.scrivi("sessioni", s.id, nuovo);
       esito(esitoD, "Salvato", "ok");
-    } catch (e) { esito(esitoD, "Non salvato: " + (e?.message ?? "errore"), "err"); }
+    } catch (e) { esito(esitoD, T("Non salvato: {0}", e?.message ?? T("errore")), "err"); }
     finally { salva.disabled = false; }
   };
   const elimina = conConferma(el("button", { class: "btn pericolo", type: "button" }, "Elimina"), "Tocca di nuovo per eliminare", async () => {
@@ -172,7 +173,7 @@ export function apriDettaglio(id) {
       await eliminaMappa(s.id);
       chiudi();
       avviso("Allenamento eliminato");
-    } catch (e) { esito(esitoD, "Non eliminato: " + (e?.message ?? "errore"), "err"); }
+    } catch (e) { esito(esitoD, T("Non eliminato: {0}", e?.message ?? T("errore")), "err"); }
   });
 
   const pesanti = el("div", { style: "display:grid;gap:14px" }, el("p", { class: "sotto" }, "Carico traccia e curve…"));
@@ -188,12 +189,12 @@ export function apriDettaglio(id) {
       campo("Fatica percepita", selFatica, AIUTO_FATICA),
       campo("Nota", nota),
       el("div", { class: "azioni" }, salva, elimina, esitoD),
-      s.fonte ? el("p", { class: "fonte" }, s.fonte + (s.file ? ` · ${s.file}` : "")) : null));
+      s.fonte ? el("p", { class: "fonte" }, s.fonte.split(" · ").map((x) => T(x)).join(" · ") + (s.file ? ` · ${s.file}` : "")) : null));
   velo.replaceChildren(foglio);
   velo.hidden = false;
   foglio.querySelector(".chiudi").focus();
   // Il riquadro della salita si aggiorna se la salita viene ricalcolata aprendo l'allenamento.
-  const tileSalita = [...(riquadri?.children ?? [])].find((t) => t.querySelector("small")?.textContent === "Salita");
+  const tileSalita = [...(riquadri?.children ?? [])].find((t) => t.querySelector("small")?.textContent === traduci("Salita"));
   // Anche la casella "Salita" della modifica, se non l'hai già cambiata a mano.
   const salitaAperta = String(s.salita_m ?? "");
   caricaPesanti(s, pesanti, lim, (v) => {
@@ -223,9 +224,9 @@ function bottoneGpx(s, d) {
     if (!testo) return esito(esitoG, "Traccia non esportabile.", "err");
     b.disabled = true;
     try {
-      await salvaFile(`allenamento-${s.data}-${s.tipo.toLowerCase()}.gpx`, testo, { tipo: "application/gpx+xml", titolo: "Esporta la traccia" });
+      await salvaFile(`inzone-${s.data}-${T(s.tipo).toLowerCase()}.gpx`, testo, { tipo: "application/gpx+xml", titolo: T("Esporta la traccia") });
       esito(esitoG, "GPX pronto.", "ok");
-    } catch (e) { if (!/cancel|abort/i.test(`${e?.name} ${e?.message}`)) esito(esitoG, "Non esportato: " + (e?.message ?? "errore"), "err"); }
+    } catch (e) { if (!/cancel|abort/i.test(`${e?.name} ${e?.message}`)) esito(esitoG, T("Non esportato: {0}", e?.message ?? T("errore")), "err"); }
     finally { b.disabled = false; }
   };
   return el("div", { class: "azioni" }, b, esitoG);
@@ -263,7 +264,7 @@ async function caricaPesanti(s, box, lim, aggiornaSalita) {
     // 1.4.0: la riscarico e ridisegno.
     if ((!mappa || !mappa.alta) && mappeAttive()) scaricaMappa(s.id, d.traccia, { rifai: !!mappa })
       .then(async (ok) => { const m = ok && g.isConnected ? await leggiMappa(s.id) : null; if (m) { mappa = m; graficoTraccia(g, d.traccia, d.curva_fc, lim, m, cursore); } })
-      .catch(() => { if (nota.isConnected) nota.textContent += " La mappa non si è scaricata: riprova con la rete aprendo di nuovo l'allenamento."; });
+      .catch(() => { if (nota.isConnected) nota.textContent += " " + T("La mappa non si è scaricata: riprova con la rete aprendo di nuovo l'allenamento."); });
   }
   // Soste (dispositivo in pausa, nessun dato) e tratti senza fascia, per segnarli sui grafici.
   const vuoti = d.curva_fc ? trovaVuoti(d.curva_fc, { traccia: d.traccia, curve: d.curve }) : [];
@@ -271,9 +272,11 @@ async function caricaPesanti(s, box, lim, aggiornaSalita) {
   const senzaFc = vuoti.filter((v) => v.tipo !== "sosta");
   if (d.curva_fc?.fc?.some((v) => v != null)) {
     const g = el("div");
-    const nota = [`Media ogni ${d.curva_fc.passo_s} secondi, sulle bande delle tue zone.`];
-    if (soste.length) nota.push(`In grigio ${soste.length === 1 ? "la sosta" : `le ${soste.length} soste`} (${fmtDur(somma(soste, (v) => v.a - v.da) / 60)} in tutto): il dispositivo era in pausa e non registrava, il tratteggio ricollega il battito di prima e di dopo.`);
-    if (senzaFc.length) nota.push(`"No FC": ${senzaFc.length === 1 ? "un tratto" : `${senzaFc.length} tratti`} senza battito dalla fascia.`);
+    const nota = [T("Media ogni {0} secondi, sulle bande delle tue zone.", d.curva_fc.passo_s)];
+    const inTutto = fmtDur(somma(soste, (v) => v.a - v.da) / 60);
+    if (soste.length) nota.push(soste.length === 1 ? T("In grigio la sosta ({0} in tutto): il dispositivo era in pausa e non registrava, il tratteggio ricollega il battito di prima e di dopo.", inTutto)
+      : T("In grigio le {0} soste ({1} in tutto): il dispositivo era in pausa e non registrava, il tratteggio ricollega il battito di prima e di dopo.", soste.length, inTutto));
+    if (senzaFc.length) nota.push(senzaFc.length === 1 ? T("\"No FC\": un tratto senza battito dalla fascia.") : T("\"No FC\": {0} tratti senza battito dalla fascia.", senzaFc.length));
     pezzi.push(el("section", { class: "card card-grafico" }, el("h2", {}, "Battito"), el("p", { class: "sotto" }, nota.join(" ")), g));
     grafici.push((cur) => graficoCurva(g, d.curva_fc, lim, vuoti, cur));
   }

@@ -13,8 +13,14 @@ import { leggiBozza, riprendiInterrotta, scartaInterrotta, registrazioneInCorso,
 import { scartaForza } from "./registra.js";
 import { nativo, fileInArrivo, tastoIndietro } from "./sorgenti.js";
 import { importaSeServe } from "./salute.js";
+import { T, LINGUA, LOCALE, traduci } from "./lingua.js";
 
 applicaTema(); // il tema scelto nelle Impostazioni, prima di disegnare
+// Le parti fisse della pagina (schede in basso, messaggio di apertura) nella lingua scelta.
+document.documentElement.lang = LINGUA;
+for (const n of document.querySelectorAll("#nav button, .stato-app b, .stato-app span")) n.lastChild.textContent = traduci(n.lastChild.textContent);
+$("nav").setAttribute("aria-label", traduci("Sezioni"));
+document.documentElement.style.setProperty("--poi", JSON.stringify(traduci("Poi") + " ")); // "Poi" nel rullo del timer HIIT (dal CSS)
 
 /* ---------- Oggi ---------- */
 const aperte = new Set(); // voci con la scheda aperta
@@ -49,7 +55,7 @@ function striscia(d) {
     const fatto = stato.sessioni.some((s) => s.data === data);
     const voci = stato.settimana[g] ?? [];
     return el("button", { type: "button", class: (data === d ? "oggi " : "") + (fatto ? "fatto" : ""), onclick: () => vai("settimana"),
-      "aria-label": `${fmtData(data, { weekday: "long", day: "numeric" })}: ${voci.length ? voci.map((v) => descriviVoce(v).titolo).join(", ") : "riposo"}${fatto ? ", allenamento fatto" : ""}` },
+      "aria-label": `${fmtData(data, { weekday: "long", day: "numeric" })}: ${voci.length ? voci.map((v) => descriviVoce(v).titolo).join(", ") : T("riposo")}${fatto ? T(", allenamento fatto") : ""}` },
       el("b", {}, fmtData(data, { weekday: "narrow" })),
       el("span", { class: "num" }, String(Number(data.slice(8)))),
       el("div", { class: "punti" }, voci.slice(0, 3).map((v) => el("i", { style: `background:${coloreTipo(v.tipo)}` }))));
@@ -61,11 +67,11 @@ function cardProgramma(d, voci, fuori) {
   for (const s of fuori) righe.push(el("div", { class: "voce-oggi" },
     el("div", { class: "voce-riga" }, iconaTipo(s.tipo),
       el("button", { type: "button", class: "voce-testo", onclick: () => apriDettaglio(s.id) },
-        el("b", {}, s.nome || nomeTipo(s.tipo, s.sottotipo)), el("span", { class: "num" }, "Fuori programma · " + metriche(s))),
+        el("b", {}, s.nome || nomeTipo(s.tipo, s.sottotipo)), el("span", { class: "num" }, T("Fuori programma · {0}", metriche(s)))),
       fattoSegno())));
   // Barra nera con le attività del giorno in grande e i riquadri delle zone obiettivo, come la pagina di un ciclocomputer.
   const tipi = [...new Set(voci.map((v) => v.tipo))];
-  const nome = tipi.length ? tipi.join(" + ") : "Riposo";
+  const nome = tipi.length ? tipi.map((x) => T(x)).join(" + ") : T("Riposo");
   const zone = [...new Set(voci.filter((v) => v.tipo !== "Forza").map((v) => descriviVoce(v).zona).filter(Boolean))].sort();
   return el("section", { class: "programma-oggi", "aria-label": "In programma oggi" },
     el("div", { class: "programma-barra" },
@@ -79,7 +85,7 @@ function cardProgramma(d, voci, fuori) {
 // Riquadri delle zone nel colore della zona; per la sola forza un riquadro neutro.
 function zonaBox(zone, forza) {
   if (!zone.length) return forza ? el("div", { class: "zone-box" }, el("div", { class: "zona-box forza" }, el("b", {}, "F"), el("span", {}, "FORZA"))) : null;
-  return el("div", { class: "zone-box" }, zone.map((z) => el("div", { class: "zona-box", style: `background:var(--z${z});color:var(--z${z}-ink)`, "aria-label": `Zona Z${z}, ${intervalloZona(z - 1)} bpm` },
+  return el("div", { class: "zone-box" }, zone.map((z) => el("div", { class: "zona-box", style: `background:var(--z${z});color:var(--z${z}-ink)`, "aria-label": T("Zona Z{0}, {1} bpm", z, intervalloZona(z - 1)) },
     el("b", {}, `Z${z}`), el("span", { class: "num" }, intervalloZona(z - 1)))));
 }
 
@@ -100,7 +106,7 @@ function rigaVoce(v) {
     el("div", { class: "voce-riga" }, iconaTipo(v.tipo),
       el("button", { type: "button", class: "voce-testo", "aria-expanded": apribile ? String(aperta) : null, disabled: !apribile,
         onclick: () => { aperta ? aperte.delete(v.id) : aperte.add(v.id); programmaRender(); } },
-        el("b", {}, titolo), el("span", {}, sotto + (apribile && !v.fatta ? (aperta ? " · chiudi" : scheda?.tipo === "Forza" || scheda?.tipo === "HIIT" ? " · vedi la scheda" : " · vedi la nota") : ""))),
+        el("b", {}, titolo), el("span", {}, sotto + (apribile && !v.fatta ? " · " + T(aperta ? "chiudi" : scheda?.tipo === "Forza" || scheda?.tipo === "HIIT" ? "vedi la scheda" : "vedi la nota") : ""))),
       azione),
     dettaglio.length ? el("div", { class: "voce-dettaglio" }, dettaglio) : null);
 }
@@ -111,11 +117,11 @@ function rigaVoce(v) {
 function bandaInterrotta() {
   const b = stato.interrotta;
   if (!b || registrazioneInCorso() || registrazioneDaSalvare()) return null;
-  const quando = new Date(b.rec.inizio).toLocaleString("it-IT", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  const quando = new Date(b.rec.inizio).toLocaleString(LOCALE, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
   const chiudi = () => { stato.interrotta = null; programmaRender(); };
   const nome = nomeTipo(b.rec.tipo, b.rec.sottotipo).toLowerCase();
   return el("section", { class: "banda", style: "display:grid;gap:8px" },
-    el("span", {}, b.finita ? `Registrazione di ${nome} finita ma non salvata (${quando}).` : `Registrazione di ${nome} interrotta (${quando}).`),
+    el("span", {}, T(b.finita ? "Registrazione di {0} finita ma non salvata ({1})." : "Registrazione di {0} interrotta ({1}).", nome, quando)),
     el("div", { class: "azioni" },
       b.finita ? null : el("button", { type: "button", class: "btn piccolo primario", onclick: () => { chiudi(); riprendiInterrotta(b, "riprendi"); } }, "Riprendi"),
       el("button", { type: "button", class: "btn piccolo" + (b.finita ? " primario" : ""), onclick: () => { chiudi(); riprendiInterrotta(b, "salva"); } }, "Salva"),
@@ -134,9 +140,9 @@ function bandaDaSalvare() {
 function bandaForza() {
   const b = ricorda.leggi("bozza-forza");
   if (!b?.inizioMs) return null;
-  const quando = new Date(b.inizioMs).toLocaleString("it-IT", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  const quando = new Date(b.inizioMs).toLocaleString(LOCALE, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
   return el("section", { class: "banda", style: "display:grid;gap:8px" },
-    el("span", {}, `Sessione di forza in corso, iniziata ${quando}.`),
+    el("span", {}, T("Sessione di forza in corso, iniziata {0}.", quando)),
     el("div", { class: "azioni" },
       el("button", { type: "button", class: "btn piccolo primario", onclick: () => vai("registra", { tipo: "forza", riprendi: true }) }, "Riprendi"),
       conConferma(el("button", { type: "button", class: "btn piccolo pericolo" }, "Scarta"), "Tocca di nuovo", async () => { await scartaForza(); programmaRender(); })));
@@ -158,7 +164,7 @@ function bandaBackup() {
     if (tipo === "ok") { avviso(testo); programmaRender(); } else { esito(esitoB, testo, tipo); esporta.disabled = false; }
   };
   return el("section", { class: "banda", style: "display:grid;gap:8px" },
-    el("span", {}, (giorni == null ? "Non hai ancora fatto un backup." : `Ultimo backup ${giorni} giorni fa.`) + " I tuoi allenamenti stanno solo su questo telefono: salvane una copia su Drive o Dropbox."),
+    el("span", {}, (giorni == null ? T("Non hai ancora fatto un backup.") : T("Ultimo backup {0} giorni fa.", giorni)) + " " + T("I tuoi allenamenti stanno solo su questo telefono: salvane una copia su Drive o Dropbox.")),
     el("div", { class: "azioni" }, esporta,
       el("button", { type: "button", class: "btn piccolo", onclick: () => { ricorda.scrivi("backup-rinvio", new Date(ora + 864e5).toISOString()); programmaRender(); } }, "Domani"), esitoB));
 }
@@ -166,7 +172,7 @@ function bandaBackup() {
 // App Android: se sul sito c'è una versione più nuova, lo dice con il collegamento per scaricarla.
 function bandaAggiornamento() {
   const a = stato.aggiornamento;
-  return a ? el("p", { class: "banda info" }, `Nuova versione dell'app (${a.versione}). `, el("a", { href: a.pagina, target: "_blank", rel: "noopener" }, "Scaricala")) : null;
+  return a ? el("p", { class: "banda info" }, T("Nuova versione dell'app ({0}).", a.versione) + " ", el("a", { href: a.pagina, target: "_blank", rel: "noopener" }, "Scaricala")) : null;
 }
 
 // Registra sessione: si scelgono attività e scheda (proposte quelle di oggi) e si parte quando si è pronti.
@@ -191,7 +197,7 @@ function cardRecupero(d) {
     const m = mediaDi(k);
     return el("div", { class: "tile" }, el("small", {}, titolo),
       el("b", {}, ultima?.[k] == null ? "—" : fmt(ultima[k]), unita ? el("em", {}, unita) : null),
-      el("span", {}, m == null ? "" : `media ${fmt(m)}`));
+      el("span", {}, m == null ? "" : T("media {0}", fmt(m))));
   };
   // Battito a riposo: l'ultimo giorno che lo ha (anche senza notte) e la media dei giorni prima.
   const tileRiposo = () => {
@@ -201,7 +207,7 @@ function cardRecupero(d) {
     const altroGiorno = u && u.data !== (ultima?.data ?? d);
     return el("div", { class: "tile" }, el("small", {}, "Battito a riposo"),
       el("b", {}, u ? fmtNum(u.fc_riposo) : "—", el("em", {}, "bpm")),
-      el("span", {}, [m == null ? "" : `media ${fmtNum(m)}`, altroGiorno ? fmtData(u.data, { day: "numeric", month: "short" }) : ""].filter(Boolean).join(" · ")));
+      el("span", {}, [m == null ? "" : T("media {0}", fmtNum(m)), altroGiorno ? fmtData(u.data, { day: "numeric", month: "short" }) : ""].filter(Boolean).join(" · ")));
   };
   // Ogni modulo porta i suoi riquadri; il controllo del recupero usa solo le misure dei moduli accesi.
   const r = recupero(stato.notti, d, stato.profilo.recupero, misureAttive(stato.profilo.moduli));
@@ -218,9 +224,9 @@ function cardRecupero(d) {
     el("div", { class: "card-testa" }, el("h2", {}, r ? "Recupero" : ossigeno && !sonno ? "Ossigeno nel sonno" : "Notte"),
       r ? el("span", { class: "pill " + PILL[r.stato][0] }, PILL[r.stato][1])
         : el("button", { type: "button", class: "lnk", onclick: () => vai("registra", { tipo: "notte", data: d }) }, inserisci)),
-    ultima && (sonno || fcSonno || ossigeno) ? el("p", { class: "sotto" }, ultima === stanotte ? "Stanotte" : "Ultima notte inserita: " + fmtData(ultima.data, { weekday: "short", day: "numeric", month: "short" })) : null,
+    ultima && (sonno || fcSonno || ossigeno) ? el("p", { class: "sotto" }, ultima === stanotte ? "Stanotte" : T("Ultima notte inserita: {0}", fmtData(ultima.data, { weekday: "short", day: "numeric", month: "short" }))) : null,
     el("div", { class: "tiles" + (tiles.length === 1 ? " uno" : tiles.length === 2 || tiles.length === 4 ? " due" : "") }, tiles),
-    r ? el("p", { class: "sotto" }, r.testo + (r.soglia ? ` La tua media del ${MISURE_RECUPERO[r.misura].nome} è ${fmtNum(r.media, 1)} bpm, soglia ${r.soglia}.` : "")) : null,
+    r ? el("p", { class: "sotto" }, r.testo + (r.soglia ? " " + T("La tua media del {0} è {1} bpm, soglia {2}.", T(MISURE_RECUPERO[r.misura].nome), fmtNum(r.media, 1), r.soglia) : "")) : null,
     r?.stato === "manca" || r?.stato === "senzaFc" ? el("button", { type: "button", class: "btn piccolo", style: "justify-self:start", onclick: () => vai("registra", { tipo: "notte", data: d }) }, inserisci) : null);
 }
 
@@ -241,7 +247,7 @@ function cardSettimana(d) {
   const zMax = perZona.reduce((best, m, i) => (m > perZona[best] ? i : best), 0);
   const zona = perZona[zMax] > 0 ? zMax + 1 : null;
   return el("section", { class: "card" },
-    el("div", { class: "card-testa" }, el("h2", {}, "Questa settimana"), previste ? el("span", { class: "sotto num" }, `${fatte} di ${previste} fatti`) : null),
+    el("div", { class: "card-testa" }, el("h2", {}, "Questa settimana"), previste ? el("span", { class: "sotto num" }, T("{0} di {1} fatti", fatte, previste)) : null),
     el("div", { class: "tiles" },
       el("div", { class: "tile" }, el("small", {}, "Tempo"), el("b", {}, fmtOre(tot), el("em", {}, "h"))),
       el("div", { class: "tile" }, el("small", {}, "Allenamenti"), el("b", {}, String(sett.length))),
@@ -250,7 +256,7 @@ function cardSettimana(d) {
         zona ? el("span", {}, fmtOre(perZona[zMax]) + " h") : null)),
     perTipo.length
       ? [el("div", { class: "barra-tipi" }, perTipo.map(([t, m]) => el("i", { style: `flex:${m};background:${coloreTipo(t)}` }))),
-        el("div", { class: "legenda num" }, perTipo.map(([t, m]) => el("span", {}, el("i", { style: `background:${coloreTipo(t)}` }), `${t === "altro" ? "Altro" : t} ${fmtDur(m)}`)))]
+        el("div", { class: "legenda num" }, perTipo.map(([t, m]) => el("span", {}, el("i", { style: `background:${coloreTipo(t)}` }), `${T(t === "altro" ? "Altro" : t)} ${fmtDur(m)}`)))]
       : el("p", { class: "vuoto" }, "Ancora nessun allenamento questa settimana."));
 }
 
@@ -283,8 +289,8 @@ registraVista("allenamenti", { vivo: true, render(main) {
       ? settimane.flatMap((w) => {
         const sett = righe.filter((s) => lunediDi(s.data) === w);
         return [
-          el("div", { class: "settimana-testa" }, el("b", {}, "Settimana del " + fmtData(w, { day: "numeric", month: "long" })),
-            el("span", { class: "num" }, `${fmtDur(somma(sett, (s) => s.durata_min))} · ${sett.length} ${sett.length === 1 ? "allenamento" : "allenamenti"}`)),
+          el("div", { class: "settimana-testa" }, el("b", {}, T("Settimana del {0}", fmtData(w, { day: "numeric", month: "long" }))),
+            el("span", { class: "num" }, `${fmtDur(somma(sett, (s) => s.durata_min))} · ${sett.length} ${T(sett.length === 1 ? "allenamento" : "allenamenti")}`)),
           ...sett.map(voceSessione),
         ];
       })
@@ -340,7 +346,7 @@ datiPronti().then(importaSeServe).then((testo) => { if (testo) avviso(testo); })
 // poi dalle altre sezioni torna a Oggi. Da Oggi, o durante una registrazione, l'app va in secondo piano.
 tastoIndietro(() => {
   if (chiudiDettaglio()) return true;
-  const freccia = document.querySelector('#vista .testata button[aria-label="Indietro"]');
+  const freccia = document.querySelector("#vista .testata button[data-indietro]");
   if (freccia) { freccia.click(); return true; }
   if (["settimana", "schede", "allenamenti", "analisi"].includes(stato.vista)) { vai("oggi"); return true; }
   return false;

@@ -1,4 +1,4 @@
-# Allenamento su misura
+# InZone
 
 Programma la settimana, registra le sessioni (forza serie per serie, timer HIIT, uscite col GPS o dai file del dispositivo) e segui i progressi sulle tue zone di battito.
 
@@ -11,7 +11,7 @@ Programma la settimana, registra le sessioni (forza serie per serie, timer HIIT,
 
 Dopo il primo avvio l'app funziona anche senza rete.
 
-**App Android:** per registrare anche a schermo spento c'è l'app da installare, nella pagina [Allenamento per Android](https://simo646.github.io/allenamento/android/).
+**App Android:** per registrare anche a schermo spento c'è l'app da installare, nella pagina [InZone per Android](https://simo646.github.io/allenamento/android/).
 
 
 ## Dove stanno i dati

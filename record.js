@@ -4,16 +4,17 @@
 // breve non batte un'uscita vera; distanza, salita e velocità non contano le sessioni al chiuso.
 import { massimale, epley } from "./analisi-file.js";
 import { CARDIO } from "./dati.js";
+import { T } from "./lingua.js";
 
 const MIN_KM = { Bici: 15, Corsa: 3, Camminata: 3 };
 const velocita = (s) => s.vel_media ?? (s.km / s.durata_min) * 60;
 const VOCI = [
-  { voce: "distanza", nome: "Distanza più lunga", breve: "Distanza", valore: (s) => (!s.indoor && s.km > 0 ? s.km : null) },
-  { voce: "durata", nome: "Durata più lunga", breve: "Durata", valore: (s) => (s.durata_min > 0 ? s.durata_min : null) },
-  { voce: "salita", nome: "Salita maggiore", breve: "Salita", valore: (s) => (!s.indoor && s.salita_m > 0 ? s.salita_m : null) },
-  { voce: "velocita", nome: "Velocità media più alta", breve: "Velocità media", solo: ["Bici"], valore: (s) => (!s.indoor && s.km >= MIN_KM.Bici && s.durata_min > 0 ? velocita(s) : null) },
+  { voce: "distanza", nome: T("Distanza più lunga"), breve: T("Distanza"), valore: (s) => (!s.indoor && s.km > 0 ? s.km : null) },
+  { voce: "durata", nome: T("Durata più lunga"), breve: T("Durata"), valore: (s) => (s.durata_min > 0 ? s.durata_min : null) },
+  { voce: "salita", nome: T("Salita maggiore"), breve: T("Salita"), valore: (s) => (!s.indoor && s.salita_m > 0 ? s.salita_m : null) },
+  { voce: "velocita", nome: T("Velocità media più alta"), breve: T("Velocità media"), solo: ["Bici"], valore: (s) => (!s.indoor && s.km >= MIN_KM.Bici && s.durata_min > 0 ? velocita(s) : null) },
   // Passo in secondi al km: più basso è meglio, quindi lo confronto col segno meno.
-  { voce: "passo", nome: "Passo medio migliore", breve: "Passo medio", solo: ["Corsa", "Camminata"], minore: true,
+  { voce: "passo", nome: T("Passo medio migliore"), breve: T("Passo medio"), solo: ["Corsa", "Camminata"], minore: true,
     valore: (s) => (!s.indoor && s.km >= MIN_KM[s.tipo] && s.durata_min > 0 ? (s.durata_min * 60) / s.km : null) },
 ];
 
@@ -58,6 +59,6 @@ export function recordPersonali(sessioni = []) {
 export function recordDi(sessioni, id, rec = recordPersonali(sessioni)) {
   return [
     ...rec.cardio.flatMap((g) => g.voci.filter((v) => v.id === id).map((v) => v.nome)),
-    ...rec.forza.filter((f) => f.id === id).map((f) => `Massimale: ${f.esercizio}`),
+    ...rec.forza.filter((f) => f.id === id).map((f) => T("Massimale: {0}", T(f.esercizio))),
   ];
 }

@@ -2,7 +2,8 @@
 import { apriArchivio } from "./archivio.js";
 import { profiloCompleto, settimanaVuota, etaDa, vociDelGiorno } from "./dati.js";
 import { calcolaZone, TIPI } from "./analisi-file.js";
-import { $, el, metti, icona, ICONE, fmtDataLunga, oggi } from "./util.js";
+import { $, el, metti, icona, ICONE, fmtDataLunga, oggi, testoKg } from "./util.js";
+import { T, LINGUA } from "./lingua.js";
 
 export const stato = {
   archivio: null, caricati: new Set(), errore: null,
@@ -106,8 +107,8 @@ export function programmaRender() {
 
 function disegna() {
   const main = $("vista");
-  if (stato.errore) return metti(main, testata({ titolo: "Allenamento" }), statoApp("I dati non sono raggiungibili", stato.errore));
-  if (!pronto()) return metti(main, testata({ titolo: "Allenamento" }), statoApp("Sto aprendo i tuoi dati", "Programma di oggi, settimana e allenamenti compaiono appena arrivano."));
+  if (stato.errore) return metti(main, testata({ titolo: "InZone" }), statoApp("I dati non sono raggiungibili", stato.errore));
+  if (!pronto()) return metti(main, testata({ titolo: "InZone" }), statoApp("Sto aprendo i tuoi dati", "Programma di oggi, settimana e allenamenti compaiono appena arrivano."));
   if (!stato.profilo.avvio_completato && stato.vista !== "avvio") { stato.vista = "avvio"; stato.param = {}; }
   $("nav").hidden = stato.vista === "avvio";
   viste[stato.vista]?.render(main, stato.param);
@@ -119,7 +120,7 @@ export const statoApp = (titolo, testo) => el("div", { class: "stato-app" }, el(
 // Testata di una vista: data e titolo con l'ingranaggio delle impostazioni, oppure "indietro".
 export function testata({ titolo, sopra = fmtDataLunga(oggi()), indietro = null, destra = null }) {
   const sinistra = el("div", { class: "indietro" },
-    indietro ? el("button", { type: "button", class: "tondo", "aria-label": "Indietro", onclick: indietro }, icona(ICONE.indietro)) : null,
+    indietro ? el("button", { type: "button", class: "tondo", "aria-label": "Indietro", "data-indietro": "", onclick: indietro }, icona(ICONE.indietro)) : null,
     el("div", {}, el("div", { class: "data" }, sopra), el("h1", {}, titolo)));
   const ingranaggio = destra === null && !indietro && stato.profilo.avvio_completato
     ? el("button", { type: "button", class: "tondo", "aria-label": "Impostazioni", onclick: () => vai("impostazioni") }, icona(ICONE.impostazioni, { spessore: 1.8 }))
@@ -152,7 +153,14 @@ export const intervalloZona = (i, lim = limiti()) => (i === 0 ? `≤${lim[0]}` :
 export const chipZona = (z, conBpm = true) => el("span", { class: "chip-zona num", style: `background:var(--z${z});color:var(--z${z}-ink)` }, `Z${z}` + (conBpm ? ` · ${intervalloZona(z - 1)}` : ""));
 
 export const coloreTipo = (t) => (TIPI.includes(t) ? `var(--t-${t.toLowerCase()})` : "var(--t-altro)");
-export const nomeTipo = (tipo, sottotipo) => (tipo ?? "Altro") + (sottotipo ? ` ${sottotipo.toLowerCase() === "mtb" ? "MTB" : sottotipo.toLowerCase()}` : "");
+// "Bici strada", "Bici MTB"; in inglese "Road bike", "MTB".
+export function nomeTipo(tipo, sottotipo) {
+  const base = T(tipo ?? "Altro");
+  if (!sottotipo) return base;
+  const mtb = sottotipo.toLowerCase() === "mtb";
+  if (LINGUA === "it") return `${base} ${mtb ? "MTB" : sottotipo.toLowerCase()}`;
+  return mtb ? "MTB" : `${T(sottotipo[0].toUpperCase() + sottotipo.slice(1).toLowerCase())} ${tipo === "Bici" ? "bike" : base.toLowerCase()}`;
+}
 export const iconaTipo = (t) => el("span", { class: "icona-tipo", style: `--c:${coloreTipo(t)}` }, icona(ICONE[t] ?? ICONE.altro));
 export const attive = () => stato.profilo.attivita?.length ? stato.profilo.attivita : TIPI;
 export const modulo = (m) => !!stato.profilo.moduli?.[m];
@@ -162,14 +170,14 @@ export function descriviVoce(v) {
   const s = v.scheda ? stato.schede[v.scheda] : null;
   const titolo = s?.titolo || nomeTipo(v.tipo, v.sottotipo ?? s?.sottotipo);
   const parti = [];
-  if (s?.tipo === "Forza") parti.push(`${s.esercizi?.length ?? 0} esercizi`);
-  if (s?.tipo === "HIIT") parti.push(`${s.esercizi?.length ?? 0} esercizi × ${s.giri} giri`);
+  if (s?.tipo === "Forza") parti.push(T("{0} esercizi", s.esercizi?.length ?? 0));
+  if (s?.tipo === "HIIT") parti.push(T("{0} esercizi × {1} giri", s.esercizi?.length ?? 0, s.giri));
   const durata = v.durata_min ?? s?.durata_min;
   const km = v.km ?? s?.km;
-  if (km) parti.push(`${String(km).replace(".", ",")} km`);
+  if (km) parti.push(`${testoKg(km)} km`);
   if (durata) parti.push(`${durata} min`);
   const zona = v.zona ?? s?.zona;
-  if (zona) parti.push(`in Z${zona}`);
+  if (zona) parti.push(T("in Z{0}", zona));
   if (s?.tipo !== "Forza" && s?.tipo !== "HIIT" && (v.sottotipo || s?.sottotipo) && s?.titolo) parti.unshift(nomeTipo(v.tipo, v.sottotipo ?? s?.sottotipo));
   return { titolo, sotto: parti.join(" · ") || (v.nota ?? ""), zona, scheda: s };
 }

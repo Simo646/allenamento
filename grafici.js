@@ -2,6 +2,7 @@
 // tacche(), asseY(), etichetteDate(), sensibile() per il riquadro informativo, legenda().
 import { el, sv, ms, fmtData, fmtNum } from "./util.js";
 import { zonaDi, mondo, metriPerPixel } from "./analisi-file.js";
+import { T } from "./lingua.js";
 
 export const ZONE = ["Z1", "Z2", "Z3", "Z4", "Z5"];
 export const COLORE_ZONA = ZONE.map((_, i) => `var(--z${i + 1})`);
@@ -410,7 +411,7 @@ export function graficoTraccia(contenitore, traccia, curva, lim, mappa = null, c
     punto.setAttribute("cy", sy(py(migliore)));
     punto.setAttribute("visibility", "visible");
     const s = t[migliore], v = fcA(migliore), zz = zonaA(migliore);
-    return { x: sx(px(migliore)), y: sy(py(migliore)), titolo: `${Math.floor(s / 3600)}:${String(Math.floor((s % 3600) / 60)).padStart(2, "0")} dalla partenza`,
+    return { x: sx(px(migliore)), y: sy(py(migliore)), titolo: T("{0} dalla partenza", `${Math.floor(s / 3600)}:${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}`),
       righe: v == null ? [[null, "Battito", "—"]] : [[COLORE_ZONA[zz], "Battito", `${v} bpm`], [null, "Zona", ZONE[zz]]] };
   }, () => { iPunto = null; punto.setAttribute("visibility", "hidden"); cursore?.mostra(null, segui); });
 
@@ -498,7 +499,7 @@ function disegnaVuoti(g, vuoti, x) {
 }
 const tipVuoto = (vuoti, sec, xPx, g) => {
   const v = vuoti.find((q) => sec >= q.da && sec < q.a);
-  return v ? { x: xPx, y: g.m.t + 30, titolo: `Dal ${Math.floor(v.da / 60)}' al ${Math.floor(v.a / 60)}'`, righe: [[null, nomeVuoto(v), durataVuoto(v)]] } : null;
+  return v ? { x: xPx, y: g.m.t + 30, titolo: T("Dal {0}' al {1}'", Math.floor(v.da / 60), Math.floor(v.a / 60)), righe: [[null, nomeVuoto(v), durataVuoto(v)]] } : null;
 };
 
 // Curva del battito di una sessione, sulle bande delle zone; `vuoti` da trovaVuoti() di analisi-file.js.

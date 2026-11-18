@@ -2,6 +2,7 @@
 // Niente I/O e niente DOM: lo usano l'app nel browser e i test in node, quindi i numeri sono gli stessi.
 // Tutti i formati diventano la stessa lista di punti {t, lat, lon, ele, fc, cad, pow, vel, dist}
 // e passano dagli stessi calcoli.
+import { T } from "./lingua.js";
 
 const MAX_PASSO_S = 10; // tra due punti più distanti di così c'è una pausa: non conta nel tempo
 const SOGLIA_SALITA_M = 3; // isteresi per non sommare il rumore dell'altimetro
@@ -56,13 +57,13 @@ export const fcMaxDaEta = (eta) => Math.round(208 - 0.7 * eta); // Tanaka, più 
 // metodo: "eta" (solo FC max), "karvonen" (FC max e riposo), "manuale" (limiti scritti a mano).
 export function calcolaZone({ metodo = "eta", eta = null, fcMax = null, fcRiposo = null, manuali = null } = {}) {
   if (metodo === "manuale") {
-    if (!validaLimiti(manuali)) throw new Error("Servono 4 limiti in bpm, crescenti");
+    if (!validaLimiti(manuali)) throw new Error(T("Servono 4 limiti in bpm, crescenti"));
     return { limiti: manuali.map(Math.round), fcMax: fcMax ?? null };
   }
   const max = fcMax ?? (eta != null ? fcMaxDaEta(eta) : null);
-  if (max == null) throw new Error("Serve l'età o la FC massima");
+  if (max == null) throw new Error(T("Serve l'età o la FC massima"));
   if (metodo === "karvonen") {
-    if (fcRiposo == null) throw new Error("Per Karvonen serve la FC a riposo");
+    if (fcRiposo == null) throw new Error(T("Per Karvonen serve la FC a riposo"));
     return { limiti: PERCENTUALI_ZONE.map((p) => Math.round(fcRiposo + p * (max - fcRiposo))), fcMax: max };
   }
   return { limiti: PERCENTUALI_ZONE.map((p) => Math.round(p * max)), fcMax: max };
@@ -89,7 +90,7 @@ const semicerchi = (v) => (v == null ? null : (v * 180) / 2 ** 31);
 
 export function riassumiFit(messages, { limiti, nomeFile = "" } = {}) {
   const s = messages.sessionMesgs?.[0];
-  if (!s) throw new Error("Il file non contiene una sessione di allenamento");
+  if (!s) throw new Error(T("Il file non contiene una sessione di allenamento"));
   const punti = (messages.recordMesgs ?? []).filter((r) => r.timestamp).map((r) => ({
     t: r.timestamp.getTime(),
     lat: semicerchi(r.positionLat), lon: semicerchi(r.positionLong),
@@ -201,10 +202,10 @@ export function leggiTcx(xml) {
 // Un GPX o TCX già letto → allenamento, con gli stessi campi del FIT.
 export function riassumiXml(testo, { limiti, nomeFile = "" } = {}) {
   const tcx = /<TrainingCenterDatabase/i.test(testo);
-  if (!tcx && !/<gpx/i.test(testo)) throw new Error("non è un file GPX o TCX");
+  if (!tcx && !/<gpx/i.test(testo)) throw new Error(T("non è un file GPX o TCX"));
   const l = tcx ? leggiTcx(testo) : leggiGpx(testo);
   const inizio = l.inizio || l.punti[0]?.t;
-  if (!inizio) throw new Error("il file non ha orari");
+  if (!inizio) throw new Error(T("il file non ha orari"));
   const base = riassumiPunti(l.punti, { limiti, inizio });
   // Il nome del file o della traccia è più preciso dello sport del TCX, che ammette solo Running/Biking/Other
   // (Mi Fitness ci scrive "Corsa brucia grassi" anche per un'escursione).
@@ -466,7 +467,7 @@ export function gpxDa(s, d, nome = s.tipo) {
   });
   const n = perXml(nome);
   return [`<?xml version="1.0" encoding="UTF-8"?>`,
-    `<gpx version="1.1" creator="Allenamento su misura" xmlns="http://www.topografix.com/GPX/1/1" xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v1">`,
+    `<gpx version="1.1" creator="InZone" xmlns="http://www.topografix.com/GPX/1/1" xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v1">`,
     `<metadata><name>${n}</name>${Number.isFinite(t0) ? `<time>${isoSecondi(t0)}</time>` : ""}</metadata>`,
     `<trk><name>${n}</name>${TIPO_GPX[s.tipo] ? `<type>${TIPO_GPX[s.tipo]}</type>` : ""}<trkseg>`,
     ...punti, "</trkseg></trk></gpx>", ""].join("\n");

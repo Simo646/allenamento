@@ -14,9 +14,10 @@ import { salvaRiassunto, iniziaForza } from "./registra.js";
 import { contenutoScheda, riassuntoScheda } from "./schede.js";
 import { impostazioniDa, eserciziDelGiro, fasiHiit, durataFasi, statoTimer, inizioFaseDopo, segnaliHiit } from "./timer-hiit.js";
 import { programmaSegnali, sbloccaAudio, suoniAttivi, impostaSuoni, segnaleZona } from "./suoni.js";
+import { T, LOCALE } from "./lingua.js";
 
 const PAUSA_AUTO = ["Corsa", "Bici"];
-const NOME_FASE = { preparazione: "Preparati", lavoro: "Lavoro", pausa: "Pausa", recupero: "Recupero" };
+const NOME_FASE = { preparazione: T("Preparati"), lavoro: T("Lavoro"), pausa: T("Pausa"), recupero: T("Recupero") };
 
 // Una sola registrazione alla volta, viva finché la pagina è aperta (anche cambiando vista).
 let s = null; // { rec, param, scelta, hiit, fascia, statoFascia, fermaSchermo, ultimoGps, erroreGps, salvataAlle, finita, riassunto }
@@ -45,7 +46,7 @@ function spegniGps() {
   gps.ferma = null;
 }
 const gpsInSfondo = () => gpsAcceso((p) => { s?.rec.posizione(p); if (s) s.ultimoGps = p; forseSalva(); }, (t) => { if (s) s.erroreGps = t; }, { sfondo: true })
-  .catch((e) => { if (s) s.erroreGps = e?.message ?? "GPS non disponibile"; });
+  .catch((e) => { if (s) s.erroreGps = e?.message ?? T("GPS non disponibile"); });
 
 /* ---------- salvataggio della registrazione in corso ---------- */
 // Una sola connessione, riusata a ogni salvataggio (uno ogni 10 secondi per tutta la registrazione).
@@ -145,8 +146,8 @@ function controllaZona(t) {
   if (t - a.fuoriDa < 15000 || t - a.ultimo < 60000) return;
   a.ultimo = t;
   segnaleZona(dir > 0);
-  notificaZona(dir > 0 ? `Battito sopra la Z${a.zona}` : `Battito sotto la Z${a.zona}`,
-    `${r.fcAttuale(t)} bpm, sei in Z${z}: ${dir > 0 ? "rallenta" : "puoi spingere un po' di più"}.`);
+  notificaZona(T(dir > 0 ? "Battito sopra la Z{0}" : "Battito sotto la Z{0}", a.zona),
+    T(dir > 0 ? "{0} bpm, sei in Z{1}: rallenta." : "{0} bpm, sei in Z{1}: puoi spingere un po' di più.", r.fcAttuale(t), z));
 }
 
 function schermataPreparazione(main, param) {
@@ -183,18 +184,18 @@ function schermataPreparazione(main, param) {
   const statoGps = cardio ? el("p", { class: "stato-sorgente" }, conGps ? "GPS: cerco il segnale…" : "GPS non disponibile qui: registro tempo e battito.") : null;
   const impostazioniGps = el("button", { type: "button", class: "lnk", hidden: true, onclick: apriImpostazioniPosizione }, "Apri le impostazioni");
   const statoQuota = conGps ? el("p", { class: "sotto" }, "") : null;
-  if (statoQuota) haBarometro().then((b) => { statoQuota.textContent = b ? "Dislivello dal barometro del telefono." : "Il telefono non ha il barometro: il dislivello viene dalla quota del GPS, lisciata."; });
+  if (statoQuota) haBarometro().then((b) => { statoQuota.textContent = T(b ? "Dislivello dal barometro del telefono." : "Il telefono non ha il barometro: il dislivello viene dalla quota del GPS, lisciata."); });
   const erroreGps = (testo) => {
     if (!statoGps?.isConnected) return;
     statoGps.textContent = "GPS: " + testo;
-    impostazioniGps.hidden = !(nativo() && /permesso/i.test(testo));
+    impostazioniGps.hidden = !(nativo() && /permesso|permission/i.test(testo));
   };
   if (conGps) {
     gpsAcceso((p) => {
       s?.rec?.posizione(p);
       if (s) s.ultimoGps = p;
-      if (statoGps.isConnected) statoGps.textContent = p.precisione != null && p.precisione > 30 ? `GPS: segnale debole, ±${Math.round(p.precisione)} m` : `GPS pronto, ±${Math.round(p.precisione ?? 0)} m`;
-    }, erroreGps).catch((e) => erroreGps(e?.message ?? "non disponibile"));
+      if (statoGps.isConnected) statoGps.textContent = p.precisione != null && p.precisione > 30 ? T("GPS: segnale debole, ±{0} m", Math.round(p.precisione)) : T("GPS pronto, ±{0} m", Math.round(p.precisione ?? 0));
+    }, erroreGps).catch((e) => erroreGps(e?.message ?? T("non disponibile")));
   } else spegniGps();
 
   // Fascia: facoltativa, per battito e zone.
@@ -209,7 +210,7 @@ function schermataPreparazione(main, param) {
         b.disabled = true;
         esito(esitoFascia, "Cerco la fascia: tienila addosso o inumidisci gli elettrodi.");
         try { s.fascia = await colleghiFascia(); ridisegna(); }
-        catch (e) { esito(esitoFascia, e?.name === "NotFoundError" ? "Nessuna fascia scelta." : "Non collegata: " + (e?.message ?? "errore"), "err"); b.disabled = false; }
+        catch (e) { esito(esitoFascia, e?.name === "NotFoundError" ? "Nessuna fascia scelta." : T("Non collegata: {0}", e?.message ?? T("errore")), "err"); b.disabled = false; }
       };
       return b;
     })(), esitoFascia);
@@ -217,7 +218,7 @@ function schermataPreparazione(main, param) {
   s.timer = setInterval(() => {
     if (!battito.isConnected) return;
     const fc = s.rec?.fcAttuale(Date.now());
-    battito.textContent = fc ? `${fc} bpm · Z${s.rec.zonaAttuale(Date.now(), limiti())}` : "in attesa del battito…";
+    battito.textContent = fc ? `${fc} bpm · Z${s.rec.zonaAttuale(Date.now(), limiti())}` : T("in attesa del battito…");
   }, 1000);
 
   const avvia = el("button", { type: "button", class: "btn primario grande" }, "Avvia");
@@ -244,7 +245,7 @@ function schermataPreparazione(main, param) {
   const avvisoSchermo = !cardio ? (hiit ? el("p", { class: "sotto" }, "Durante il timer lo schermo resta acceso. I segnali usano il volume dei contenuti multimediali.") : null)
     : !disp.sfondo ? el("p", { class: "banda" }, "Tieni l'app aperta e lo schermo acceso: se si spegne, la registrazione si ferma finché non lo riaccendi.")
     : ricorda.leggi("avviso-batteria") ? null
-    : el("p", { class: "banda info" }, "Su Xiaomi, Samsung e altri telefoni togli il risparmio energetico per Allenamento (Impostazioni › App › Allenamento › Batteria › Nessuna restrizione), altrimenti a schermo spento il telefono può fermarla.",
+    : el("p", { class: "banda info" }, "Su Xiaomi, Samsung e altri telefoni togli il risparmio energetico per InZone (Impostazioni › App › InZone › Batteria › Nessuna restrizione), altrimenti a schermo spento il telefono può fermarla.",
       el("button", { type: "button", class: "lnk", style: "margin-left:8px", onclick: (e) => { ricorda.scrivi("avviso-batteria", true); e.target.parentElement.remove(); } }, "Fatto"));
 
   metti(main,
@@ -292,7 +293,7 @@ function boxTimer(h, sc) {
   const elenco = el("ol", { class: "foglio-scheda" });
   const aggiorna = () => {
     const es = eserciziDelGiro(sc?.esercizi?.map((e) => e.nome), h.n);
-    totale.textContent = `Durata: ${fmtSec(durataFasi(fasiHiit(h, es)))}, preparazione compresa.`;
+    totale.textContent = T("Durata: {0}, preparazione compresa.", fmtSec(durataFasi(fasiHiit(h, es))));
     metti(elenco, es.map((nome, i) => el("li", {}, el("span", { class: "n" }, String(i + 1)), el("b", {}, nome))));
   };
   const num = (k, etichetta, min, max) => campo(etichetta, el("input", { id: `dv-${k}`, class: "num", inputmode: "numeric", value: h[k],
@@ -360,13 +361,13 @@ function schermataRegistrazione(main) {
     } else media.v.textContent = fcMedia(r) ?? "—";
     const vecchio = s.ultimoGps ? Math.round((t - s.ultimoGps.t) / 1000) : null;
     stato1.textContent = [
-      conGps ? (s.erroreGps && !s.ultimoGps ? `GPS: ${s.erroreGps}` : vecchio == null ? "GPS: cerco il segnale…" : vecchio > 15 ? `GPS: nessuna posizione da ${vecchio} s` : `GPS ±${Math.round(s.ultimoGps.precisione ?? 0)} m`) : null,
+      conGps ? (s.erroreGps && !s.ultimoGps ? `GPS: ${s.erroreGps}` : vecchio == null ? T("GPS: cerco il segnale…") : vecchio > 15 ? T("GPS: nessuna posizione da {0} s", vecchio) : `GPS ±${Math.round(s.ultimoGps.precisione ?? 0)} m`) : null,
       testoFascia(),
-      s.avviso ? `Avviso fuori da Z${s.avviso.zona}` : null,
+      s.avviso ? T("Avviso fuori da Z{0}", s.avviso.zona) : null,
     ].filter(Boolean).join(" · ");
     fascione.hidden = !r.inPausa;
-    fascione.textContent = r.pausaManuale ? "In pausa" : "Pausa automatica";
-    pausa.textContent = r.pausaManuale ? "Riprendi" : "Pausa";
+    fascione.textContent = T(r.pausaManuale ? "In pausa" : "Pausa automatica");
+    pausa.textContent = T(r.pausaManuale ? "Riprendi" : "Pausa");
     collega?.rinfresca();
     forseSalva();
   }
@@ -392,9 +393,9 @@ function coloraZona(nodo, z) {
   nodo.style.background = z ? `var(--z${z})` : "";
   nodo.style.color = z ? `var(--z${z}-ink)` : "";
 }
-const oraInizio = (r) => new Date(r.inizio).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+const oraInizio = (r) => new Date(r.inizio).toLocaleTimeString(LOCALE, { hour: "2-digit", minute: "2-digit" });
 const fcMedia = (r) => { const v = r.punti.filter((p) => p.fc).map((p) => p.fc); return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : null; };
-const testoFascia = () => (s.fascia ? (s.statoFascia === "persa" ? "Fascia: segnale perso, riprovo…" : `Fascia: ${s.fascia.nome}`) : "Senza fascia");
+const testoFascia = () => (s.fascia ? (s.statoFascia === "persa" ? T("Fascia: segnale perso, riprovo…") : T("Fascia: {0}", s.fascia.nome)) : T("Senza fascia"));
 
 // Fascia da collegare anche a registrazione iniziata (dopo una ripresa, o se all'inizio non c'era) e da ricollegare a
 // mano quando il segnale è perso: l'app riprova da sola, ma così si può anche sceglierne un'altra. Il pulsante si vede
@@ -405,11 +406,11 @@ function bottoneCollega(dopo) {
   b.rinfresca = () => {
     const persa = !!s?.fascia && s.statoFascia === "persa";
     b.hidden = !!s?.fascia && !persa;
-    if (!b.disabled) b.textContent = persa ? "Ricollega la fascia" : "Collega la fascia";
+    if (!b.disabled) b.textContent = T(persa ? "Ricollega la fascia" : "Collega la fascia");
   };
   b.onclick = async () => {
     b.disabled = true;
-    b.textContent = "Cerco la fascia…";
+    b.textContent = T("Cerco la fascia…");
     try {
       const vecchia = s.fascia;
       s.fascia = null;
@@ -493,9 +494,9 @@ function schermataHiit(main) {
     if (st.finito) { if (!h.finendo) { h.finendo = true; finisci(t, { naturale: true }); } return; }
     const f = st.fase, lavoro = f.tipo === "lavoro";
     box.dataset.fase = r.pausaManuale ? "ferma" : f.tipo;
-    fase.textContent = r.pausaManuale ? "In pausa" : NOME_FASE[f.tipo];
+    fase.textContent = r.pausaManuale ? T("In pausa") : NOME_FASE[f.tipo];
     conto.textContent = fmtSec(Math.ceil(st.resta - 0.05));
-    etichetta.textContent = lavoro ? "Adesso" : "Prossimo";
+    etichetta.textContent = T(lavoro ? "Adesso" : "Prossimo");
     scorri(lavori.indexOf(st.ora));
     giro.textContent = `${f.giro}/${h.imp.giri}`;
     esercizio.textContent = `${f.n}/${h.esercizi.length}`;
@@ -505,8 +506,8 @@ function schermataHiit(main) {
     coloraZona(tileBattito, z);
     led.style.setProperty("--led", z ? `var(--z${z})` : lavoro ? "var(--z5)" : "var(--faint)");
     stato1.textContent = testoFascia();
-    audio.textContent = suoniAttivi() ? "Audio sì" : "Audio no";
-    pausa.textContent = r.pausaManuale ? "Riprendi" : "Pausa";
+    audio.textContent = T(suoniAttivi() ? "Audio sì" : "Audio no");
+    pausa.textContent = T(r.pausaManuale ? "Riprendi" : "Pausa");
     collega?.rinfresca();
     forseSalva();
   }
@@ -567,7 +568,7 @@ function schermataFine(main) {
       avviso("Allenamento salvato");
       vai("oggi");
       setTimeout(() => apriDettaglio(id), 300);
-    } catch (e) { esito(esitoF, "Non salvato: " + (e?.message ?? "errore"), "err"); salva.disabled = false; }
+    } catch (e) { esito(esitoF, T("Non salvato: {0}", e?.message ?? T("errore")), "err"); salva.disabled = false; }
   };
   const scarta = conConferma(el("button", { type: "button", class: "btn pericolo" }, "Scarta"), "Tocca di nuovo: la perdi", async () => { await salvaBozza(null); s = null; avviso("Registrazione scartata"); vai("oggi"); });
   const vuota = r.durata_min < 1 && !r.km;
@@ -577,7 +578,7 @@ function schermataFine(main) {
     el("section", { class: "card" },
       el("div", { class: "tiles" },
         tile("Tempo", fmtSec(r.durata_min * 60).replace(/:00$/, ""), "min"),
-        r.km != null ? tile("Distanza", fmtNum(r.km, 2), "km") : hiit ? tile("Giri", `${hiit.giri_fatti} di ${hiit.giri}`) : tile("FC media", r.fc_media != null ? fmtNum(r.fc_media) : null, "bpm"),
+        r.km != null ? tile("Distanza", fmtNum(r.km, 2), "km") : hiit ? tile("Giri", T("{0} di {1}", hiit.giri_fatti, hiit.giri)) : tile("FC media", r.fc_media != null ? fmtNum(r.fc_media) : null, "bpm"),
         tile("FC massima", r.fc_max != null ? fmtNum(r.fc_max) : null, "bpm")),
       el("p", { class: "sotto num" }, metriche(r)),
       barraZone(r),

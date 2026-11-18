@@ -261,7 +261,7 @@ main{display:grid;gap:14px;align-content:start;padding-bottom:14px}
   font-family:var(--font-testo);transition:transform .45s ease,font-size .45s ease,opacity .45s ease,color .45s ease}
 .hiit-riga[data-rel="0"]{font-size:clamp(24px,8.5vw,40px);font-weight:700}
 .hiit-riga[data-rel="1"]{transform:translateY(46px);font-size:clamp(20px,6.5vw,30px);font-weight:600}
-.hiit-riga[data-rel="1"]::before{content:"Poi ";font-family:var(--font-ui);font-size:13px;font-weight:500;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.hiit-riga[data-rel="1"]::before{content:var(--poi,"Poi ");font-family:var(--font-ui);font-size:13px;font-weight:500;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
 .hiit-riga[data-rel="2"]{transform:translateY(80px);font-size:17px;font-weight:500;color:var(--muted)}
 .hiit-riga[data-rel="sopra"]{transform:translateY(-44px);font-size:clamp(24px,8.5vw,40px);font-weight:700;opacity:0}
 .hiit-riga[data-rel="sotto"]{transform:translateY(110px);font-size:17px;opacity:0}

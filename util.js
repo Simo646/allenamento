@@ -1,7 +1,9 @@
-// Utilità comuni: costruzione del DOM, date e numeri in italiano, icone.
+// Utilità comuni: costruzione del DOM (con le scritte tradotte), date e numeri nella lingua scelta, icone.
+import { traduci, LOCALE, LINGUA } from "./lingua.js";
 
 export const $ = (id) => document.getElementById(id);
 
+const TRADOTTI = new Set(["aria-label", "placeholder", "title", "alt"]);
 export function el(tag, attrs = {}, ...figli) {
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
@@ -10,9 +12,9 @@ export function el(tag, attrs = {}, ...figli) {
     else if (k === "style") e.style.cssText = v;
     else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
     else if (k === "value") e.value = v;
-    else e.setAttribute(k, v === true ? "" : v);
+    else e.setAttribute(k, v === true ? "" : TRADOTTI.has(k) ? traduci(v) : v);
   }
-  for (const f of figli.flat(Infinity)) if (f != null && f !== false) e.append(f instanceof Node ? f : String(f));
+  for (const f of figli.flat(Infinity)) if (f != null && f !== false) e.append(f instanceof Node ? f : traduci(String(f)));
   return e;
 }
 
@@ -21,7 +23,7 @@ export function el(tag, attrs = {}, ...figli) {
 export const campo = (etichetta, input, aiuto) => el("label", { class: "campo" }, el("span", {}, etichetta), input, aiuto ? el("small", {}, aiuto) : null);
 export const opzione = (gruppo, valore, testo, attivo, onchange) =>
   el("label", {}, el("input", { type: "radio", name: gruppo, value: valore, checked: attivo, onchange }), el("span", {}, testo));
-export const testoKg = (kg) => (kg == null ? "" : String(kg).replace(".", ","));
+export const testoKg = (kg) => (kg == null ? "" : LINGUA === "it" ? String(kg).replace(".", ",") : String(kg));
 
 // Sostituisce il contenuto di un nodo saltando i pezzi assenti (replaceChildren scriverebbe "null").
 export const metti = (nodo, ...figli) => nodo.replaceChildren(...figli.flat(Infinity).filter((f) => f != null && f !== false));
@@ -29,7 +31,7 @@ export const metti = (nodo, ...figli) => nodo.replaceChildren(...figli.flat(Infi
 export function sv(tag, attrs = {}, testo) {
   const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
   for (const [k, v] of Object.entries(attrs)) if (v != null) e.setAttribute(k, v);
-  if (testo != null) e.textContent = testo;
+  if (testo != null) e.textContent = traduci(String(testo));
   return e;
 }
 
@@ -66,13 +68,13 @@ export const ms = (d) => Date.parse(d + "T12:00:00Z");
 export const giorniTra = (a, b) => Math.round((ms(b) - ms(a)) / 864e5);
 export const piuGiorni = (d, n) => new Date(ms(d) + n * 864e5).toISOString().slice(0, 10);
 export const lunediDi = (d) => piuGiorni(d, -((new Date(ms(d)).getUTCDay() + 6) % 7));
-export const fmtData = (d, o) => new Date(ms(d)).toLocaleDateString("it-IT", { timeZone: "UTC", ...o });
+export const fmtData = (d, o) => new Date(ms(d)).toLocaleDateString(LOCALE, { timeZone: "UTC", ...o });
 export const fmtGiorno = (d) => fmtData(d, { weekday: "short", day: "numeric", month: "short" });
 const maiuscola = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 export const fmtDataLunga = (d) => maiuscola(fmtData(d, { weekday: "long", day: "numeric", month: "long" }));
 
 export const fmtNum = (x, dec = 0) =>
-  x == null || Number.isNaN(x) ? "—" : Number(x).toLocaleString("it-IT", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+  x == null || Number.isNaN(x) ? "—" : Number(x).toLocaleString(LOCALE, { minimumFractionDigits: dec, maximumFractionDigits: dec });
 export const fmtKg = (x) => fmtNum(x, Number.isInteger(x) ? 0 : 1);
 export function fmtDur(min) {
   if (min == null) return "—";
@@ -90,13 +92,13 @@ export const media = (valori) => (valori.length ? valori.reduce((a, b) => a + b,
 
 export function avviso(testo) {
   const a = $("avviso");
-  a.textContent = testo;
+  a.textContent = traduci(testo);
   a.hidden = false;
   clearTimeout(avviso.t);
   avviso.t = setTimeout(() => (a.hidden = true), 2800);
 }
 export function esito(nodo, testo, tipo) {
-  nodo.textContent = testo;
+  nodo.textContent = traduci(testo);
   nodo.className = "esito" + (tipo ? " " + tipo : "");
 }
 
@@ -106,7 +108,7 @@ export function conConferma(pulsante, testoConferma, azione) {
   pulsante.addEventListener("click", async () => {
     if (pulsante.dataset.conferma !== "1") {
       pulsante.dataset.conferma = "1";
-      pulsante.textContent = testoConferma;
+      pulsante.textContent = traduci(testoConferma);
       setTimeout(() => { if (pulsante.isConnected) { pulsante.dataset.conferma = ""; pulsante.textContent = originale; } }, 4000);
       return;
     }

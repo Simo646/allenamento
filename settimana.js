@@ -5,6 +5,7 @@ import { GIORNI, NOMI_GIORNI, ESERCIZI, CARDIO, nuovaScheda, durataHiit, durataF
 import { SOTTOTIPI_BICI } from "./analisi-file.js";
 import { el, metti, icona, ICONE, oggi, piuGiorni, lunediDi, fmtData, numero, avviso, esito, conConferma, campo, opzione, testoKg } from "./util.js";
 import { sceltaPiano } from "./schede.js";
+import { T } from "./lingua.js";
 
 /* ---------- Settimana ---------- */
 registraVista("settimana", { vivo: true, render(main) {
@@ -13,7 +14,7 @@ registraVista("settimana", { vivo: true, render(main) {
     const data = piuGiorni(lun, i);
     const voci = statoVoci(stato.settimana[g] ?? [], stato.sessioni.filter((s) => s.data === data));
     return el("div", { class: "giorno-sett" + (data === d ? " oggi" : "") },
-      el("h3", {}, NOMI_GIORNI[g], el("span", { class: "num" }, (data === d ? "oggi · " : "") + fmtData(data, { day: "numeric", month: "short" }))),
+      el("h3", {}, NOMI_GIORNI[g], el("span", { class: "num" }, (data === d ? T("oggi") + " · " : "") + fmtData(data, { day: "numeric", month: "short" }))),
       voci.length ? voci.map((v) => {
         const { titolo, sotto } = descriviVoce(v);
         return el("button", { type: "button", class: "voce-sett", onclick: () => vai("voce", { giorno: g, id: v.id }) },
@@ -21,7 +22,7 @@ registraVista("settimana", { vivo: true, render(main) {
           el("span", { class: "voce-testo" }, el("b", {}, titolo), el("span", {}, sotto)),
           v.fatta ? el("span", { class: "fatto-segno" }, icona(ICONE.spunta, { spessore: 2.6 }), "Fatto") : null);
       }) : el("p", { class: "riposo" }, "Riposo"),
-      el("button", { type: "button", class: "lnk", style: "justify-self:start", onclick: () => vai("voce", { giorno: g }) }, "+ Aggiungi a " + NOMI_GIORNI[g].toLowerCase()));
+      el("button", { type: "button", class: "lnk", style: "justify-self:start", onclick: () => vai("voce", { giorno: g }) }, T("+ Aggiungi a {0}", NOMI_GIORNI[g].toLowerCase())));
   });
   metti(main,
     testata({ titolo: "Piano" }),
@@ -82,9 +83,9 @@ registraVista("voce", { vivo: false, render(main, { giorno, id, preset }) {
       const voce = raccogli();
       await salva(voce);
       if (selScheda.value === "+nuova") return vai("scheda", { nuova: v.tipo, collega: { giorno: selGiorno.value, id: voce.id } });
-      avviso(esistente ? "Settimana aggiornata" : "Aggiunta a " + NOMI_GIORNI[selGiorno.value].toLowerCase());
+      avviso(esistente ? T("Settimana aggiornata") : T("Aggiunta a {0}", NOMI_GIORNI[selGiorno.value].toLowerCase()));
       torna();
-    } catch (e) { esito(esitoV, "Non salvato: " + (e?.message ?? "errore"), "err"); salvaBtn.disabled = false; }
+    } catch (e) { esito(esitoV, T("Non salvato: {0}", e?.message ?? T("errore")), "err"); salvaBtn.disabled = false; }
   };
   const elimina = esistente ? conConferma(el("button", { type: "button", class: "btn pericolo" }, "Togli"), "Tocca di nuovo per togliere", async () => {
     const s = { ...stato.settimana };
@@ -126,7 +127,7 @@ registraVista("scheda", { vivo: false, render(main, param) {
   const salvaBtn = el("button", { type: "button", class: "btn primario" }, "Salva la scheda");
   salvaBtn.onclick = async () => {
     const pulita = pulisci(bozza);
-    if (!pulita.titolo) pulita.titolo = bozza.tipo === "Forza" || bozza.tipo === "HIIT" ? bozza.tipo : nomeTipo(pulita.tipo, pulita.sottotipo);
+    if (!pulita.titolo) pulita.titolo = bozza.tipo === "Forza" || bozza.tipo === "HIIT" ? T(bozza.tipo) : nomeTipo(pulita.tipo, pulita.sottotipo);
     if ((pulita.tipo === "Forza" || pulita.tipo === "HIIT") && !pulita.esercizi.length) return esito(esitoS, "Aggiungi almeno un esercizio.", "err");
     if (pulita.tipo === "HIIT" && !(pulita.lavoro_s >= 5 && pulita.giri >= 1)) return esito(esitoS, "Servono almeno 5 secondi per esercizio e un giro.", "err");
     salvaBtn.disabled = true;
@@ -140,7 +141,7 @@ registraVista("scheda", { vivo: false, render(main, param) {
       }
       avviso("Scheda salvata");
       if (param.collega) vai("settimana"); else vai("scheda-vista", { id });
-    } catch (e) { esito(esitoS, "Non salvata: " + (e?.message ?? "errore"), "err"); salvaBtn.disabled = false; }
+    } catch (e) { esito(esitoS, T("Non salvata: {0}", e?.message ?? T("errore")), "err"); salvaBtn.disabled = false; }
   };
   const elimina = esistente ? conConferma(el("button", { type: "button", class: "btn pericolo" }, "Elimina la scheda"), "Tocca di nuovo per eliminare", async () => {
     await stato.archivio.elimina("schede", esistente.id);
@@ -181,14 +182,14 @@ function editorForza(b, ridisegna) {
   b.esercizi ??= [];
   const RECUPERI = [30, 45, 60, 90, 120, 150, 180, 240];
   const durata = el("p", { class: "sotto num" });
-  const aggiornaDurata = () => (durata.textContent = `Durata stimata: circa ${durataForza(b)} minuti, contando 40" per serie (o i suoi secondi) più il recupero.`);
+  const aggiornaDurata = () => (durata.textContent = T("Durata stimata: circa {0} minuti, contando 40\" per serie (o i suoi secondi) più il recupero.", durataForza(b)));
   aggiornaDurata();
   const schede = b.esercizi.map((e, i) => {
     e.serie ??= [{ kg: null, rip: 10 }];
     e._diverse ??= e.serie.length > 1 && !tutteUguali(e.serie);
     const nome = el("input", { id: `s-e${i}-nome`, list: "elenco-esercizi", value: e.nome ?? "", placeholder: "Scegli o scrivi un esercizio", oninput: (ev) => (e.nome = ev.target.value) });
     const rec = el("select", { id: `s-e${i}-rec`, onchange: (ev) => { e.recupero_s = numero(ev.target.value); aggiornaDurata(); } },
-      el("option", { value: "" }, "—"), RECUPERI.map((s) => el("option", { value: s, selected: e.recupero_s === s }, s < 60 ? `${s} s` : `${s / 60} min`.replace(".5", ",5"))));
+      el("option", { value: "" }, "—"), RECUPERI.map((s) => el("option", { value: s, selected: e.recupero_s === s }, s < 60 ? `${s} s` : `${testoKg(s / 60)} min`)));
     const nota = el("input", { id: `s-e${i}-nota`, value: e.nota ?? "", placeholder: "Tecnica, varianti, attrezzo (facoltativa)", oninput: (ev) => (e.nota = ev.target.value) });
     const aTempo = e.unita === "sec", q = aTempo ? "sec" : "rip", nomeQ = aTempo ? "Secondi" : "Ripetizioni";
     const misura = el("div", { class: "seg", role: "radiogroup", "aria-label": "Misura" },
@@ -215,9 +216,9 @@ function editorForza(b, ridisegna) {
           el("span", { class: "intest" }, "Serie"), el("span", { class: "intest" }, "kg"), el("span", { class: "intest" }, nomeQ), el("span"),
           e.serie.map((s, j) => [
             el("span", { class: "n" }, String(j + 1)),
-            el("input", { id: `s-e${i}-s${j}-kg`, class: "input num", inputmode: "decimal", value: testoKg(s.kg), placeholder: "corpo libero", "aria-label": `${e.nome || "Esercizio"}, serie ${j + 1}, chili`, oninput: (ev) => (s.kg = numero(ev.target.value)) }),
-            el("input", { id: `s-e${i}-s${j}-${q}`, class: "input num", inputmode: "numeric", value: s[q] ?? "", "aria-label": `${e.nome || "Esercizio"}, serie ${j + 1}, ${nomeQ.toLowerCase()}`, oninput: (ev) => { s[q] = numero(ev.target.value); aggiornaDurata(); } }),
-            e.serie.length > 1 ? piccoloBtn(`Togli la serie ${j + 1}`, ICONE.chiudi, () => { e.serie.splice(j, 1); ridisegna(); }) : el("span"),
+            el("input", { id: `s-e${i}-s${j}-kg`, class: "input num", inputmode: "decimal", value: testoKg(s.kg), placeholder: "corpo libero", "aria-label": T("{0}, serie {1}, chili", e.nome || T("Esercizio"), j + 1), oninput: (ev) => (s.kg = numero(ev.target.value)) }),
+            el("input", { id: `s-e${i}-s${j}-${q}`, class: "input num", inputmode: "numeric", value: s[q] ?? "", "aria-label": `${T("{0}, serie {1}", e.nome || T("Esercizio"), j + 1)}, ${T(nomeQ).toLowerCase()}`, oninput: (ev) => { s[q] = numero(ev.target.value); aggiornaDurata(); } }),
+            e.serie.length > 1 ? piccoloBtn(T("Togli la serie {0}", j + 1), ICONE.chiudi, () => { e.serie.splice(j, 1); ridisegna(); }) : el("span"),
           ])),
         el("div", { class: "azioni" },
           el("button", { type: "button", class: "btn tratteggio piccolo", onclick: () => { const u = e.serie[e.serie.length - 1]; e.serie.push({ kg: u?.kg ?? null, [q]: u?.[q] ?? (aTempo ? 30 : 10) }); ridisegna(); } }, "+ Serie"),
@@ -225,7 +226,7 @@ function editorForza(b, ridisegna) {
       ];
     }
     return el("section", { class: "card esercizio" },
-      el("div", { class: "esercizio-testa" }, el("h2", {}, `Esercizio ${i + 1}`),
+      el("div", { class: "esercizio-testa" }, el("h2", {}, T("Esercizio {0}", i + 1)),
         el("div", { style: "display:flex" },
           piccoloBtn("Sposta su", ICONE.su, () => { sposta(b.esercizi, i, -1); ridisegna(); }),
           piccoloBtn("Sposta giù", ICONE.giu, () => { sposta(b.esercizi, i, 1); ridisegna(); }),
@@ -246,7 +247,7 @@ function editorHiit(b, ridisegna) {
   b.esercizi ??= [];
   if (!b.esercizi.length) b.esercizi.push({ nome: "" });
   const durata = el("p", { class: "sotto num" });
-  const aggiornaDurata = () => (durata.textContent = `Durata: circa ${durataHiit(b)} minuti.`);
+  const aggiornaDurata = () => (durata.textContent = T("Durata: circa {0} minuti.", durataHiit(b)));
   aggiornaDurata();
   const num = (k, etichetta, id) => campo(etichetta, el("input", { id, class: "num", inputmode: "numeric", value: b[k] ?? "", oninput: (e) => { b[k] = numero(e.target.value) ?? 0; aggiornaDurata(); } }));
   const quanti = campo("Esercizi per giro", el("input", { id: "s-quanti", class: "num", inputmode: "numeric", value: b.esercizi.length, onchange: (e) => {
@@ -264,7 +265,7 @@ function editorHiit(b, ridisegna) {
       el("p", { class: "sotto" }, "In quest'ordine in ogni giro. Durante il timer vedi quello in corso e il successivo; quelli senza nome hanno solo il numero."),
       b.esercizi.map((e, i) => el("div", { style: "display:flex;gap:6px;align-items:center" },
         el("span", { class: "num", style: "width:20px;font-weight:700;text-align:center" }, String(i + 1)),
-        el("input", { id: `s-h${i}`, class: "input", list: "elenco-esercizi", value: e.nome ?? "", placeholder: `Esercizio ${i + 1}`, "aria-label": `Esercizio ${i + 1}`, oninput: (ev) => (e.nome = ev.target.value) }),
+        el("input", { id: `s-h${i}`, class: "input", list: "elenco-esercizi", value: e.nome ?? "", placeholder: T("Esercizio {0}", i + 1), "aria-label": T("Esercizio {0}", i + 1), oninput: (ev) => (e.nome = ev.target.value) }),
         piccoloBtn("Sposta su", ICONE.su, () => { sposta(b.esercizi, i, -1); ridisegna(); }),
         b.esercizi.length > 1 ? piccoloBtn("Togli", ICONE.chiudi, () => { b.esercizi.splice(i, 1); ridisegna(); }) : null)),
       el("button", { type: "button", class: "btn tratteggio piccolo", style: "justify-self:start", onclick: () => { b.esercizi.push({ nome: "" }); ridisegna(); } }, "+ Aggiungi esercizio")));
@@ -292,6 +293,6 @@ function pulisci(b) {
     return { nome: e.nome.trim(), recupero_s: e.recupero_s ?? null, ...(aTempo ? { unita: "sec" } : {}), ...(e.nota?.trim() ? { nota: e.nota.trim() } : {}),
       serie: (e.serie ?? []).filter((s) => s.kg || (aTempo ? s.sec : s.rip)).map((s) => (aTempo ? { kg: s.kg ?? null, sec: s.sec ?? null } : { kg: s.kg ?? null, rip: s.rip ?? null })) };
   });
-  if (out.tipo === "HIIT") out.esercizi = (b.esercizi ?? []).map((e, i) => ({ nome: e.nome?.trim() || `Esercizio ${i + 1}` }));
+  if (out.tipo === "HIIT") out.esercizi = (b.esercizi ?? []).map((e, i) => ({ nome: e.nome?.trim() || T("Esercizio {0}", i + 1) }));
   return out;
 }
