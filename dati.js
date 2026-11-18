@@ -16,12 +16,15 @@ export const PROFILO_PREDEFINITO = {
   zone: null, // [4 limiti]; null finché il primo avvio non è finito
   attivita: ["Forza", "HIIT", "Corsa", "Camminata", "Trekking", "Bici"],
   sottotipi_bici: ["Strada", "Gravel", "MTB"],
-  moduli: { sonno: false, ossigeno: false, riposo: false, peso: false },
+  moduli: { sonno: false, battito_sonno: false, ossigeno: false, riposo: false, peso: false },
   recupero: { scarto_bpm: 3, notti: 14 },
   avvio_completato: false,
 };
 export const etaDa = (annoNascita, oggi = new Date()) => (annoNascita ? oggi.getFullYear() - annoNascita : null);
-export const profiloCompleto = (p) => ({ ...PROFILO_PREDEFINITO, ...p, moduli: { ...PROFILO_PREDEFINITO.moduli, ...p?.moduli }, recupero: { ...PROFILO_PREDEFINITO.recupero, ...p?.recupero } });
+// Fino alla 1.8.3 il battito nel sonno stava nel modulo Sonno: i profili di prima lo ereditano da lì.
+export const profiloCompleto = (p) => ({ ...PROFILO_PREDEFINITO, ...p,
+  moduli: { ...PROFILO_PREDEFINITO.moduli, battito_sonno: !!p?.moduli?.sonno, ...p?.moduli },
+  recupero: { ...PROFILO_PREDEFINITO.recupero, ...p?.recupero } });
 
 /* ---------- esercizi ---------- */
 // Elenco di partenza per la scelta rapida; si può sempre scrivere un nome libero.
@@ -153,9 +156,9 @@ export function precompilaEsercizio(esScheda, sessioni, data) {
 // Due giorni di fila sopra la soglia → riduci il carico. Servono almeno 5 valori per avere una media.
 // Due misure, mai mischiate: il battito nel sonno e, quando manca, il battito a riposo (per esempio da Health
 // Connect, se l'orologio non esporta il battito della notte). Ogni valore si confronta con la media della sua misura.
-// Ogni misura ha il suo modulo: fc_sonno col modulo Sonno, fc_riposo col modulo Battito a riposo.
+// Ogni misura ha il suo modulo: fc_sonno col modulo Battito nel sonno, fc_riposo col modulo Battito a riposo.
 export const MISURE_RECUPERO = {
-  fc_sonno: { nome: "battito nel sonno", titolo: "Battito nel sonno", giorni: "notti", stanotte: "stanotte", due: "Due notti col battito alto", modulo: "sonno" },
+  fc_sonno: { nome: "battito nel sonno", titolo: "Battito nel sonno", giorni: "notti", stanotte: "stanotte", due: "Due notti col battito alto", modulo: "battito_sonno" },
   fc_riposo: { nome: "battito a riposo", titolo: "Battito a riposo", giorni: "giorni", stanotte: "oggi", due: "Due giorni col battito a riposo alto", modulo: "riposo" },
 };
 // Le misure dei moduli accesi; nessuna → niente controllo del recupero.

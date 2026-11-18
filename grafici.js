@@ -74,19 +74,25 @@ function sensibile(g, trova, alUscire) {
   const muovi = (ev) => {
     const r = g.svg.getBoundingClientRect();
     const p = trova(((ev.clientX - r.left) / r.width) * g.W, ((ev.clientY - r.top) / r.height) * g.H);
-    if (p) mostraTip(g.box, (p.x / g.W) * g.box.clientWidth, (p.y / g.H) * g.box.clientHeight, p.titolo, p.righe);
+    if (p) { mostraTip(g.box, (p.x / g.W) * g.box.clientWidth, (p.y / g.H) * g.box.clientHeight, p.titolo, p.righe); aperti.set(g.box, chiudi); }
   };
+  const chiudi = () => { chiudiTip(g); alUscire?.(); };
   area.addEventListener("pointermove", muovi);
   area.addEventListener("pointerdown", muovi);
-  // Col mouse il segno sparisce uscendo dal grafico; col dito resta dove l'hai lasciato, così lo leggi a dito alzato.
+  // Col mouse il segno sparisce uscendo dal grafico; col dito resta dove l'hai lasciato, così lo leggi a dito alzato,
+  // e si toglie toccando fuori dal grafico.
   area.addEventListener("pointerleave", (ev) => {
     if (ev.pointerType !== "mouse") return;
-    chiudiTip(g);
-    alUscire?.();
+    chiudi();
+    aperti.delete(g.box);
   });
   g.add(area);
 }
 const chiudiTip = (g) => { const t = g.box.querySelector(".tip"); if (t) t.hidden = true; };
+const aperti = new Map();
+document.addEventListener("pointerdown", (ev) => {
+  for (const [box, chiudi] of aperti) if (!box.contains(ev.target)) { aperti.delete(box); if (box.isConnected) chiudi(); }
+}, true);
 
 // Cursore comune ai grafici di un allenamento: toccando un istante su un grafico (o un punto della traccia) gli altri
 // mostrano lo stesso istante. `mostra(sec, da)` avvisa tutti tranne chi l'ha mosso; sec null li nasconde.

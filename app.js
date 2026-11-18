@@ -36,7 +36,7 @@ registraVista("oggi", { vivo: true, render(main) {
     striscia(d),
     cardProgramma(d, voci, fuori),
     azioniRapide(),
-    modulo("sonno") || modulo("ossigeno") || modulo("riposo") ? cardRecupero(d) : null,
+    ["sonno", "battito_sonno", "ossigeno", "riposo"].some(modulo) ? cardRecupero(d) : null,
     cardSettimana(d),
     cardUltimi());
 } });
@@ -175,13 +175,13 @@ function azioniRapide() {
   return el("div", { class: "azioni-rapide", role: "group", "aria-label": "Registra" },
     el("button", { type: "button", class: "btn primario grande largo", onclick: () => vai("dal-vivo", {}) }, "Registra sessione"),
     b("Importa file", () => vai("registra", { tipo: "file", data: oggi() })),
-    modulo("sonno") || modulo("ossigeno") ? b("+ Notte", () => vai("registra", { tipo: "notte", data: oggi() }))
+    modulo("sonno") || modulo("battito_sonno") || modulo("ossigeno") ? b("+ Notte", () => vai("registra", { tipo: "notte", data: oggi() }))
       : modulo("riposo") ? b("+ Battito a riposo", () => vai("registra", { tipo: "notte", data: oggi() })) : null,
     modulo("peso") ? b("+ Peso", () => vai("registra", { tipo: "peso", data: oggi() })) : null);
 }
 
 function cardRecupero(d) {
-  const sonno = modulo("sonno"), ossigeno = modulo("ossigeno"), riposo = modulo("riposo");
+  const sonno = modulo("sonno"), fcSonno = modulo("battito_sonno"), ossigeno = modulo("ossigeno"), riposo = modulo("riposo");
   const notti = [...stato.notti].sort((a, b) => b.data.localeCompare(a.data));
   const stanotte = notti.find((n) => n.data === d);
   const ultima = stanotte ?? notti[0];
@@ -205,21 +205,20 @@ function cardRecupero(d) {
   };
   // Ogni modulo porta i suoi riquadri; il controllo del recupero usa solo le misure dei moduli accesi.
   const r = recupero(stato.notti, d, stato.profilo.recupero, misureAttive(stato.profilo.moduli));
-  const inserisci = sonno || ossigeno ? "Inserisci la notte" : "Inserisci il battito";
-  const PILL = { ok: ["ok", "Via libera"], attenzione: ["attenzione", "Battito alto"], riduci: ["riduci", "Riduci il carico"], manca: ["neutro", sonno ? "Manca la notte" : "Manca il battito"], senzaFc: ["neutro", "Manca il battito"], dati: ["neutro", "Media in costruzione"] };
+  const inserisci = sonno || fcSonno || ossigeno ? "Inserisci la notte" : "Inserisci il battito";
+  const PILL = { ok: ["ok", "Via libera"], attenzione: ["attenzione", "Battito alto"], riduci: ["riduci", "Riduci il carico"], manca: ["neutro", fcSonno ? "Manca la notte" : "Manca il battito"], senzaFc: ["neutro", "Manca il battito"], dati: ["neutro", "Media in costruzione"] };
   const tiles = [
-    // Battito nel sonno: se c'è anche il battito a riposo, solo quando l'orologio lo ha mai dato (sennò sarebbe sempre "—").
-    sonno && (!riposo || notti.some((n) => n.fc_sonno != null)) ? tile("Battito nel sonno", "fc_sonno", "bpm") : null,
+    fcSonno ? tile("Battito nel sonno", "fc_sonno", "bpm") : null,
     sonno ? tile("Sonno", "durata_min", "h", fmtOre) : null,
     riposo ? tileRiposo() : null,
     ossigeno ? tile("SpO₂ minima", "spo2_min", "%") : null,
-    ossigeno && !sonno && !riposo ? tile("SpO₂ media", "spo2_media", "%") : null,
+    ossigeno && !sonno && !fcSonno && !riposo ? tile("SpO₂ media", "spo2_media", "%") : null,
   ].filter(Boolean);
   return el("section", { class: "card" },
-    el("div", { class: "card-testa" }, el("h2", {}, r ? "Recupero" : "Ossigeno nel sonno"),
+    el("div", { class: "card-testa" }, el("h2", {}, r ? "Recupero" : ossigeno && !sonno ? "Ossigeno nel sonno" : "Notte"),
       r ? el("span", { class: "pill " + PILL[r.stato][0] }, PILL[r.stato][1])
         : el("button", { type: "button", class: "lnk", onclick: () => vai("registra", { tipo: "notte", data: d }) }, inserisci)),
-    ultima && (sonno || ossigeno) ? el("p", { class: "sotto" }, ultima === stanotte ? "Stanotte" : "Ultima notte inserita: " + fmtData(ultima.data, { weekday: "short", day: "numeric", month: "short" })) : null,
+    ultima && (sonno || fcSonno || ossigeno) ? el("p", { class: "sotto" }, ultima === stanotte ? "Stanotte" : "Ultima notte inserita: " + fmtData(ultima.data, { weekday: "short", day: "numeric", month: "short" })) : null,
     el("div", { class: "tiles" + (tiles.length === 1 ? " uno" : tiles.length === 2 || tiles.length === 4 ? " due" : "") }, tiles),
     r ? el("p", { class: "sotto" }, r.testo + (r.soglia ? ` La tua media del ${MISURE_RECUPERO[r.misura].nome} è ${fmtNum(r.media, 1)} bpm, soglia ${r.soglia}.` : "")) : null,
     r?.stato === "manca" || r?.stato === "senzaFc" ? el("button", { type: "button", class: "btn piccolo", style: "justify-self:start", onclick: () => vai("registra", { tipo: "notte", data: d }) }, inserisci) : null);

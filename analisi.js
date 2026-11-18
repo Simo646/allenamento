@@ -183,20 +183,18 @@ registraVista("analisi", { vivo: true, render(main) {
 
   // Sonno e ossigeno
   const notti = stato.notti.filter((n) => n.data >= primo);
-  const sonnoOn = modulo("sonno"), riposoOn = modulo("riposo");
-  if (sonnoOn || riposoOn) {
-    // Un grafico per misura, ognuna col suo modulo: la soglia sta su quella che usa il controllo di oggi. Il battito
-    // nel sonno, se c'è anche quello a riposo, solo quando l'orologio lo ha mai dato.
+  const sonnoOn = modulo("sonno");
+  {
+    // Un grafico per misura, ognuna col suo modulo: la soglia sta su quella che usa il controllo di oggi.
     const attive = misureAttive(stato.profilo.moduli);
     const r = recupero(stato.notti, d, stato.profilo.recupero, attive);
-    const grafici = attive.filter((k) => k !== "fc_sonno" || !riposoOn || stato.notti.some((n) => n.fc_sonno != null));
-    for (const k of grafici) {
+    for (const k of attive) {
       const M = MISURE_RECUPERO[k], mia = r?.misura === k;
       const [c, g] = card(M.titolo, mia && r.soglia ? `Linea tratteggiata: la tua soglia di oggi, ${r.soglia} bpm (media ${fmtNum(r.media, 1)} + ${stato.profilo.recupero.scarto_bpm}).`
         : mia ? `La soglia compare dopo 5 ${M.giorni}.` : r ? `Oggi il controllo del recupero usa il ${MISURE_RECUPERO[r.misura].nome}.` : "Per giorno, in bpm.");
       sezioni.push(c);
       disegni.push(() => graficoLinea(g, {
-        punti: notti.filter((n) => n[k] != null).map((n) => ({ data: n.data, v: n[k], extra: k === "fc_sonno" ? [[null, "Sonno", fmtDur(n.durata_min)]] : [] })),
+        punti: notti.filter((n) => n[k] != null).map((n) => ({ data: n.data, v: n[k], extra: k === "fc_sonno" && sonnoOn && n.durata_min != null ? [[null, "Sonno", fmtDur(n.durata_min)]] : [] })),
         formato: { asse: String, tip: (v) => `${v} bpm`, nome: "Battito" }, soglia: mia ? r.soglia ?? undefined : undefined, etichettaSoglia: mia && r.soglia ? `${r.soglia}` : "", titoloTip: (p) => fmtGiorno(p.data), colore: "var(--sonno)",
       }));
     }
